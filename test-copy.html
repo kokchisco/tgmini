@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Copy Test</title>
+</head>
+<body>
+    <h1>Copy Function Test</h1>
+    
+    <div>
+        <label>Test Link:</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="referralLinkInput" readonly 
+                   value="https://t.me/realearnx_bot?start=ref123456" 
+                   style="flex: 1; padding: 8px;">
+            <button onclick="copyReferralLink()" 
+                    style="padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px;">
+                📋 Copy
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function copyReferralLink() {
+            console.log('Copy function called');
+            
+            const input = document.getElementById('referralLinkInput');
+            if (!input) {
+                console.error('Input not found!');
+                alert('❌ Input field not found!');
+                return;
+            }
+            
+            const linkText = input.value;
+            console.log('Link to copy:', linkText);
+            
+            if (!linkText || linkText.trim() === '') {
+                console.error('Link is empty');
+                alert('❌ No link to copy!');
+                return;
+            }
+            
+            // Simple approach - select the text and use execCommand
+            try {
+                input.focus();
+                input.select();
+                input.setSelectionRange(0, 99999); // For mobile devices
+                
+                const successful = document.execCommand('copy');
+                console.log('Copy successful:', successful);
+                
+                if (successful) {
+                    alert('✅ Link copied to clipboard!');
+                    
+                    // Visual feedback
+                    const btn = document.querySelector('[onclick="copyReferralLink()"]');
+                    if (btn) {
+                        const originalContent = btn.innerHTML;
+                        btn.innerHTML = '✅ Copied!';
+                        btn.style.backgroundColor = '#4CAF50';
+                        
+                        setTimeout(() => {
+                            btn.innerHTML = originalContent;
+                            btn.style.backgroundColor = '#007bff';
+                        }, 1500);
+                    }
+                } else {
+                    alert('❌ Copy failed. Please manually copy the selected text.');
+                }
+            } catch (err) {
+                console.error('Copy error:', err);
+                alert('❌ Copy not supported. Please manually copy the text.');
+            }
+        }
+    </script>
+</body>
+</html>

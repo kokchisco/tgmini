@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGTask Bot - Earn Points</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="app.js" defer></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+            padding-bottom: 70px; /* Reduced space for fixed footer */
+        }
+
+        .app-container {
+            max-width: 400px;
+            margin: 0 auto;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .profile-pic {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 600;
+            overflow: hidden;
+        }
+
+        .profile-pic img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .user-info h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .user-info p {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Main Content */
+        .main-content {
+            padding: 20px;
+        }
+
+        /* Balance Card */
+        .balance-card {
+            background: linear-gradient(135deg, #4ecdc4, #44a08d);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .balance-title {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .balance-amount {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .balance-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .balance-stat {
+            text-align: center;
+        }
+
+        .balance-stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .balance-stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .action-btn {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: white;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .action-btn i {
+            font-size: 20px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .action-btn span {
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* Leaderboard Card */
+        .leaderboard-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .leaderboard-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .leaderboard-item:last-child {
+            border-bottom: none;
+        }
+
+        .rank {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin-right: 12px;
+            font-size: 14px;
+        }
+
+        .rank.gold {
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            color: #333;
+        }
+
+        .rank.silver {
+            background: linear-gradient(45deg, #c0c0c0, #e5e5e5);
+            color: #333;
+        }
+
+        .rank.bronze {
+            background: linear-gradient(45deg, #cd7f32, #daa520);
+            color: white;
+        }
+
+        .rank.other {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .player-info {
+            flex: 1;
+        }
+
+        .player-name {
+            font-weight: 600;
+            margin-bottom: 2px;
+            font-size: 14px;
+        }
+
+        .player-stats {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        .player-points {
+            font-weight: 700;
+            color: #4ecdc4;
+            font-size: 16px;
+        }
+
+        /* Page Content */
+        .page-content {
+            display: none;
+        }
+
+        .page-content.active {
+            display: block;
+        }
+
+        /* Tasks Page */
+        .task-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 20px;
+        }
+
+        .task-tab {
+            flex: 1;
+            padding: 12px 16px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .task-tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .task-tab:not(.active) {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .task-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .task-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .task-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .task-points {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .task-description {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(78, 205, 196, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Earn Page */
+        .earn-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .earn-progress {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #4ecdc4;
+        }
+
+        .earn-description {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-bottom: 20px;
+        }
+
+        .claim-btn {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 16px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .claim-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
+        }
+
+        .claim-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Loading Animation */
+        .loading-spinner {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #4ecdc4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* History Page */
+        .history-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 20px;
+        }
+
+        .history-tab {
+            flex: 1;
+            padding: 12px 16px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .history-tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .history-tab:not(.active) {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .history-item {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .history-title {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .history-amount {
+            font-weight: 700;
+            color: #4ecdc4;
+            font-size: 16px;
+        }
+
+        .history-date {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .history-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .status-pending {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+
+        .status-completed {
+            background: rgba(78, 205, 196, 0.2);
+            color: #4ecdc4;
+        }
+
+        .status-failed {
+            background: rgba(255, 107, 107, 0.2);
+            color: #ff6b6b;
+        }
+
+        /* Profile Page */
+        .profile-menu {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .profile-menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: white;
+        }
+
+        .profile-menu-item:last-child {
+            border-bottom: none;
+        }
+
+        .profile-menu-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .menu-item-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .menu-item-icon {
+            width: 24px;
+            text-align: center;
+        }
+
+        .menu-item-text {
+            font-weight: 500;
+        }
+
+        .menu-item-arrow {
+            opacity: 0.6;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+
+        .form-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+
+        .form-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-textarea:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+
+        /* Fixed Footer */
+        .footer-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 0;
+            z-index: 1000;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .footer-nav-container {
+            max-width: 400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .footer-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: white;
+            padding: 8px;
+            border-radius: 8px;
+        }
+
+        .footer-nav-item.active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .footer-nav-item i {
+            font-size: 18px;
+        }
+
+        .footer-nav-item span {
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        /* Utility Classes */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.7;
+        }
+
+        .error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            color: #ff6b6b;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        .success {
+            background: rgba(78, 205, 196, 0.2);
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            color: #4ecdc4;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            opacity: 0.7;
+        }
+
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 16px;
+            }
+            
+            .balance-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .task-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="user-profile">
+                <div class="profile-pic" id="profilePic">
+                    <span id="profileInitial">U</span>
+                </div>
+                <div class="user-info">
+                    <h3 id="userName">User</h3>
+                    <p id="userUsername">@username</p>
+                </div>
+            </div>
+            <div class="logo">TGTask</div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Home Page -->
+            <div id="homePage" class="page-content active">
+                <!-- Balance Card -->
+                <div class="balance-card">
+                    <div class="balance-title">Total Balance</div>
+                    <div class="balance-amount" id="balanceAmount">0</div>
+                    <div class="balance-stats">
+                        <div class="balance-stat">
+                            <div class="balance-stat-value" id="totalFriends">0</div>
+                            <div class="balance-stat-label">Friends</div>
+                        </div>
+                        <div class="balance-stat">
+                            <div class="balance-stat-value" id="userRank">#0</div>
+                            <div class="balance-stat-label">Rank</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <a href="#" class="action-btn" onclick="showWithdrawPage()">
+                        <i class="fas fa-money-bill-wave"></i>
+                        <span>Withdraw</span>
+                    </a>
+                    <a href="#" class="action-btn" onclick="showAdvertisePage()">
+                        <i class="fas fa-bullhorn"></i>
+                        <span>Advertise</span>
+                    </a>
+                    <a href="#" class="action-btn" onclick="showBankPage()">
+                        <i class="fas fa-university"></i>
+                        <span>Bank</span>
+                    </a>
+                </div>
+
+                <!-- Leaderboard -->
+                <div class="leaderboard-card">
+                    <div class="leaderboard-title">🏆 Top 10 Referrers</div>
+                    <div id="leaderboardContent">
+                        <div class="loading">Loading leaderboard...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tasks Page -->
+            <div id="tasksPage" class="page-content">
+                <div class="task-tabs">
+                    <div class="task-tab active" data-task-tab="telegram">Telegram</div>
+                    <div class="task-tab" data-task-tab="whatsapp">WhatsApp</div>
+                    <div class="task-tab" data-task-tab="facebook">Facebook</div>
+                </div>
+                <div id="tasksContent">
+                    <div class="loading">Loading tasks...</div>
+                </div>
+            </div>
+
+            <!-- Earn Page -->
+            <div id="earnPage" class="page-content">
+                <div class="earn-card">
+                    <div class="earn-progress" id="earnProgress">0/5</div>
+                    <div class="earn-description">Daily reward claims remaining</div>
+                    <button class="claim-btn" id="claimBtn" onclick="claimReward()">
+                        <i class="fas fa-gift"></i> Claim Reward
+                    </button>
+                    <div class="loading-spinner" id="claimSpinner"></div>
+                </div>
+                <div id="earnHistory">
+                    <div class="loading">Loading history...</div>
+                </div>
+            </div>
+
+            <!-- History Page -->
+            <div id="historyPage" class="page-content">
+                <div class="history-tabs">
+                    <div class="history-tab active" data-history-tab="withdrawals">Withdrawals</div>
+                    <div class="history-tab" data-history-tab="earnings">Earnings</div>
+                </div>
+                <div id="historyContent">
+                    <div class="loading">Loading history...</div>
+                </div>
+            </div>
+
+            <!-- Profile Page -->
+            <div id="profilePage" class="page-content">
+                <!-- Profile Balance Card -->
+                <div class="balance-card" style="margin-bottom: 20px;">
+                    <div class="balance-title">Your Balance</div>
+                    <div class="balance-amount" id="profileBalanceAmount">0</div>
+                </div>
+                
+                <div class="profile-menu">
+                    <a href="#" class="profile-menu-item" onclick="showInvitePage()">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-share-alt"></i>
+                            </div>
+                            <div class="menu-item-text">Invite Friends</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-right"></i>
+                        </div>
+                    </a>
+                    <a href="#" class="profile-menu-item" onclick="showTeamPage()">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="menu-item-text">My Team</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-right"></i>
+                        </div>
+                    </a>
+                    <a href="#" class="profile-menu-item" onclick="showAboutPage()">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-info-circle"></i>
+                            </div>
+                            <div class="menu-item-text">About Us</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-right"></i>
+                        </div>
+                    </a>
+                    <a href="#" class="profile-menu-item" onclick="contactAdmin()">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-headset"></i>
+                            </div>
+                            <div class="menu-item-text">Contact Admin</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-right"></i>
+                        </div>
+                    </a>
+                    <a href="#" class="profile-menu-item" onclick="showFaqPage()">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-question-circle"></i>
+                            </div>
+                            <div class="menu-item-text">FAQs</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-right"></i>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Withdraw Page -->
+            <div id="withdrawPage" class="page-content">
+                <div class="balance-card">
+                    <div class="balance-title">Available Balance</div>
+                    <div class="balance-amount" id="withdrawBalance">0</div>
+                </div>
+                <form id="withdrawForm">
+                    <div class="form-group">
+                        <label class="form-label">Amount to Withdraw</label>
+                        <input type="number" class="form-input" id="withdrawAmount" placeholder="Enter amount" min="1000" step="100">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Bank Account</label>
+                        <input type="text" class="form-input" id="bankAccount" placeholder="Bank account details" readonly>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-paper-plane"></i> Apply Withdrawal
+                    </button>
+                </form>
+                <div class="earn-description" style="margin-top: 16px; text-align: center;">
+                    Minimum withdrawal: ₦1,000<br>
+                    Processing time: 24-48 hours
+                </div>
+            </div>
+
+            <!-- Bank Page -->
+            <div id="bankPage" class="page-content">
+                <div class="balance-card">
+                    <div class="balance-title">Bank Account Setup</div>
+                    <div class="earn-description">Add your bank details to receive withdrawals</div>
+                </div>
+                <form id="bankForm">
+                    <div class="form-group">
+                        <label class="form-label">Account Name</label>
+                        <input type="text" class="form-input" id="accountName" placeholder="Enter account name">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Account Number</label>
+                        <input type="text" class="form-input" id="accountNumber" placeholder="Enter account number">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Bank</label>
+                        <select class="form-select" id="bankSelect">
+                            <option value="">Select your bank</option>
+                            <option value="kuda">Kuda Bank</option>
+                            <option value="moniepoint">Moniepoint</option>
+                            <option value="opay">Opay</option>
+                            <option value="palmpay">PalmPay</option>
+                            <option value="smartcash">SmartCash</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-save"></i> Save Bank Details
+                    </button>
+                </form>
+                <div class="earn-description" style="margin-top: 16px; text-align: center;">
+                    Bank details can only be added once.<br>
+                    To modify: 3,000 points fee
+                </div>
+            </div>
+
+            <!-- Advertise Page -->
+            <div id="advertisePage" class="page-content">
+                <div class="empty-state">
+                    <i class="fas fa-bullhorn"></i>
+                    <h3>Coming Soon</h3>
+                    <p>Advertise your channels and groups to get more members!</p>
+                </div>
+            </div>
+
+            <!-- About Page -->
+            <div id="aboutPage" class="page-content">
+                <div class="balance-card">
+                    <div class="balance-title">About TGTask</div>
+                    <div class="earn-description">
+                        TGTask is a revolutionary platform that rewards users for completing social media tasks. 
+                        Join channels, invite friends, and earn real money!
+                    </div>
+                </div>
+                <div class="profile-menu">
+                    <div class="profile-menu-item">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="menu-item-text">Active Users</div>
+                        </div>
+                        <div class="menu-item-arrow">10,000+</div>
+                    </div>
+                    <div class="profile-menu-item">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
+                            <div class="menu-item-text">Total Paid</div>
+                        </div>
+                        <div class="menu-item-arrow">₦5M+</div>
+                    </div>
+                    <div class="profile-menu-item">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-star"></i>
+                            </div>
+                            <div class="menu-item-text">Rating</div>
+                        </div>
+                        <div class="menu-item-arrow">4.8/5</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FAQ Page -->
+            <div id="faqPage" class="page-content">
+                <div class="balance-card">
+                    <div class="balance-title">Frequently Asked Questions</div>
+                </div>
+                <div class="profile-menu">
+                    <div class="profile-menu-item" onclick="toggleFaq('faq1')">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-question"></i>
+                            </div>
+                            <div class="menu-item-text">How do I earn points?</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    <div class="profile-menu-item" onclick="toggleFaq('faq2')">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-question"></i>
+                            </div>
+                            <div class="menu-item-text">When can I withdraw?</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    <div class="profile-menu-item" onclick="toggleFaq('faq3')">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-question"></i>
+                            </div>
+                            <div class="menu-item-text">How do referrals work?</div>
+                        </div>
+                        <div class="menu-item-arrow">
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invite Page -->
+            <div id="invitePage" class="page-content">
+                <div class="balance-card">
+                    <div class="balance-title">Invite Friends</div>
+                    <div class="earn-description">Share your referral link and earn points for each friend who joins!</div>
+                </div>
+                <div class="profile-menu">
+                    <div class="profile-menu-item">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-link"></i>
+                            </div>
+                            <div class="menu-item-text">Your Referral Link</div>
+                        </div>
+                        <div class="menu-item-arrow" id="referralLink">Loading...</div>
+                    </div>
+                    <div class="profile-menu-item">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="menu-item-text">Total Referred</div>
+                        </div>
+                        <div class="menu-item-arrow" id="totalReferred">0</div>
+                    </div>
+                    <div class="profile-menu-item">
+                        <div class="menu-item-left">
+                            <div class="menu-item-icon">
+                                <i class="fas fa-coins"></i>
+                            </div>
+                            <div class="menu-item-text">Earned from Referrals</div>
+                        </div>
+                        <div class="menu-item-arrow" id="referralEarnings">₦0</div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-primary" style="width: 100%;" onclick="copyReferralLink()">
+                        <i class="fas fa-copy"></i> Copy Referral Link
+                    </button>
+                </div>
+                <div class="earn-description" style="margin-top: 16px; text-align: center;">
+                    Earn ₦500 for each friend who joins using your link!<br>
+                    They also get ₦200 bonus when they join.
+                </div>
+            </div>
+
+            <!-- Team Page -->
+            <div id="teamPage" class="page-content">
+                <div class="balance-card">
+                    <div class="balance-title">My Team</div>
+                    <div class="earn-description">View all users who joined using your referral link</div>
+                </div>
+                <div id="teamContent">
+                    <div class="loading">Loading team members...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fixed Footer Navigation -->
+        <div class="footer-nav">
+            <div class="footer-nav-container">
+                <a href="#" class="footer-nav-item active" data-page="home">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+                <a href="#" class="footer-nav-item" data-page="tasks">
+                    <i class="fas fa-tasks"></i>
+                    <span>Tasks</span>
+                </a>
+                <a href="#" class="footer-nav-item" data-page="earn">
+                    <i class="fas fa-gift"></i>
+                    <span>Earn</span>
+                </a>
+                <a href="#" class="footer-nav-item" data-page="history">
+                    <i class="fas fa-history"></i>
+                    <span>History</span>
+                </a>
+                <a href="#" class="footer-nav-item" data-page="profile">
+                    <i class="fas fa-user"></i>
+                    <span>Profile</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

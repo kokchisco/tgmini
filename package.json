@@ -1,0 +1,38 @@
+{
+  "name": "tgtask-bot",
+  "version": "1.0.0",
+  "description": "Telegram mini-app bot for task completion and points earning",
+  "main": "src/bot/index.js",
+  "scripts": {
+    "start": "node src/bot/index.js",
+    "dev": "nodemon src/bot/index.js",
+    "webapp": "node src/webapp/server.js",
+    "dev:webapp": "nodemon src/webapp/server.js",
+    "db:migrate": "node src/database/migrate.js",
+    "db:seed": "node src/database/seed.js"
+  },
+  "keywords": ["telegram", "bot", "mini-app", "tasks", "points"],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.64.0",
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1",
+    "axios": "^1.6.0",
+    "moment": "^2.29.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

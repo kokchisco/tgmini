@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test FAQ and Copy</title>
+    <style>
+        .faq-item {
+            border: 1px solid #ddd;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .menu-item {
+            padding: 15px;
+            cursor: pointer;
+            background: #f5f5f5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .faq-content {
+            padding: 15px;
+            background: #f9f9f9;
+            border-top: 1px solid #ddd;
+            display: none;
+        }
+        .copy-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .copy-input {
+            width: 70%;
+            padding: 10px;
+            margin-right: 10px;
+        }
+        .copy-btn {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test FAQ and Copy Functions</h1>
+    
+    <!-- Copy Test Section -->
+    <div class="copy-section">
+        <h3>Copy Link Test</h3>
+        <input type="text" class="copy-input" id="referralLinkInput" value="https://t.me/yourbot?start=123456" readonly>
+        <button class="copy-btn" onclick="copyReferralLink()">📋 Copy</button>
+    </div>
+    
+    <!-- FAQ Test Section -->
+    <div class="faq-section">
+        <h3>FAQ Test</h3>
+        
+        <div class="faq-item">
+            <div class="menu-item" onclick="toggleFaq('faq1')">
+                <span>How do I earn points?</span>
+                <span id="faq1-arrow">⬇️</span>
+            </div>
+            <div class="faq-content" id="faq1-content">
+                <strong>You can earn points by:</strong><br><br>
+                • Joining Telegram channels and groups: +10-15 points each<br>
+                • Inviting friends to join: +25 points per friend<br>
+                • Claiming daily rewards: +50-500 points daily<br>
+            </div>
+        </div>
+        
+        <div class="faq-item">
+            <div class="menu-item" onclick="toggleFaq('faq2')">
+                <span>When can I withdraw?</span>
+                <span id="faq2-arrow">⬇️</span>
+            </div>
+            <div class="faq-content" id="faq2-content">
+                <strong>Withdrawal requirements:</strong><br><br>
+                • Minimum balance: ₦1,000<br>
+                • Processing time: 24-48 hours<br>
+                • Bank details must be added<br>
+            </div>
+        </div>
+        
+        <div class="faq-item">
+            <div class="menu-item" onclick="toggleFaq('faq3')">
+                <span>How do referrals work?</span>
+                <span id="faq3-arrow">⬇️</span>
+            </div>
+            <div class="faq-content" id="faq3-content">
+                <strong>Referral system:</strong><br><br>
+                • Share your unique referral link<br>
+                • Earn ₦500 when friend joins<br>
+                • Get bonus daily claims for every 10 friends<br>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleFaq(faqId) {
+            console.log('Toggle FAQ called:', faqId);
+            
+            const content = document.getElementById(faqId + '-content');
+            const arrow = document.getElementById(faqId + '-arrow');
+            
+            if (!content) {
+                console.error('Content not found:', faqId);
+                return;
+            }
+            
+            // Check current state
+            const isHidden = content.style.display === 'none' || content.style.display === '';
+            
+            // Close all FAQs first
+            document.querySelectorAll('.faq-content').forEach(item => {
+                item.style.display = 'none';
+            });
+            document.querySelectorAll('[id$="-arrow"]').forEach(item => {
+                item.textContent = '⬇️';
+            });
+            
+            // If this FAQ was closed, open it
+            if (isHidden) {
+                content.style.display = 'block';
+                if (arrow) arrow.textContent = '⬆️';
+                console.log('Opened FAQ:', faqId);
+            } else {
+                console.log('Closed FAQ:', faqId);
+            }
+        }
+        
+        function copyReferralLink() {
+            console.log('Copy function called');
+            
+            const input = document.getElementById('referralLinkInput');
+            if (!input) {
+                alert('Input not found!');
+                return;
+            }
+            
+            // Focus and select the input
+            input.focus();
+            input.select();
+            input.setSelectionRange(0, 99999);
+            
+            try {
+                const successful = document.execCommand('copy');
+                console.log('Copy result:', successful);
+                
+                if (successful) {
+                    alert('✅ Link copied successfully!');
+                    
+                    // Change button temporarily
+                    const btn = document.querySelector('.copy-btn');
+                    const originalText = btn.textContent;
+                    btn.textContent = '✅ Copied!';
+                    btn.style.background = 'green';
+                    
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '#007bff';
+                    }, 2000);
+                } else {
+                    alert('❌ Copy failed');
+                }
+            } catch (err) {
+                console.error('Copy error:', err);
+                alert('❌ Copy error: ' + err.message);
+            }
+        }
+        
+        // Test on page load
+        window.onload = function() {
+            console.log('Page loaded, testing functions...');
+            console.log('FAQ elements found:');
+            console.log('faq1-content:', document.getElementById('faq1-content'));
+            console.log('faq2-content:', document.getElementById('faq2-content'));
+            console.log('faq3-content:', document.getElementById('faq3-content'));
+            console.log('referralLinkInput:', document.getElementById('referralLinkInput'));
+        };
+    </script>
+</body>
+</html>

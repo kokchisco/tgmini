@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGTask Admin Panel</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .admin-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.8;
+        }
+
+        .admin-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+
+        .admin-tab {
+            padding: 12px 20px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .admin-tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .admin-tab:not(.active) {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .config-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .config-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+
+        .form-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+
+        .form-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-textarea:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(78, 205, 196, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #4ecdc4;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .table-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 720px;
+        }
+
+        .table th,
+        .table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Responsive table wrapper */
+        .table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: rgba(78, 205, 196, 0.2);
+            color: #4ecdc4;
+        }
+
+        .status-inactive {
+            background: rgba(255, 107, 107, 0.2);
+            color: #ff6b6b;
+        }
+
+        .status-pending {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.7;
+        }
+
+        .error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            color: #ff6b6b;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        .success {
+            background: rgba(78, 205, 196, 0.2);
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            color: #4ecdc4;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .admin-tabs {
+                flex-wrap: wrap;
+            }
+            
+            .admin-tab {
+                flex: 1;
+                min-width: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="header">
+            <h1>🔧 TGTask Admin Panel</h1>
+            <p>Manage your bot configuration and monitor activity</p>
+        </div>
+
+        <div class="admin-tabs">
+            <div class="admin-tab active" data-tab="dashboard">📊 Dashboard</div>
+            <div class="admin-tab" data-tab="config">⚙️ Configuration</div>
+            <div class="admin-tab" data-tab="tasks">📋 Tasks</div>
+            <div class="admin-tab" data-tab="users">👥 Users</div>
+            <div class="admin-tab" data-tab="withdrawals">💰 Withdrawals</div>
+            <div class="admin-tab" data-tab="channels">📺 Channels</div>
+            <div class="admin-tab" data-tab="groups">👥 Groups</div>
+            <div class="admin-tab" data-tab="social">🌐 Social Tasks</div>
+            <div class="admin-tab" data-tab="moderation">🛡️ Moderation</div>
+            <div class="admin-tab" data-tab="broadcast">📣 Broadcast</div>
+            <div class="admin-tab" data-tab="onboarding">✅ Onboarding</div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboardTab" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalUsers">0</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="activeUsers">0</div>
+                    <div class="stat-label">Active Today</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalPoints">0</div>
+                    <div class="stat-label">Total Points</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pendingWithdrawals">0</div>
+                    <div class="stat-label">Pending Withdrawals</div>
+                </div>
+            </div>
+
+            <div class="config-card" id="dashboardErrors"></div>
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-chart-line"></i>
+                    Recent Activity
+                </div>
+                <div id="recentActivity">
+                    <div class="loading">Loading recent activity...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div id="configTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-coins"></i>
+                    Points Configuration
+                </div>
+                <form id="pointsConfigForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Channel Join Points</label>
+                            <input type="number" class="form-input" id="channelJoinPoints" placeholder="10">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Group Join Points</label>
+                            <input type="number" class="form-input" id="groupJoinPoints" placeholder="15">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Friend Invite Points</label>
+                            <input type="number" class="form-input" id="friendInvitePoints" placeholder="25">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Daily Task Limit</label>
+                            <input type="number" class="form-input" id="dailyTaskLimit" placeholder="5">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Points Config
+                    </button>
+                </form>
+            </div>
+
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-money-bill-wave"></i>
+                    Withdrawal Configuration
+                </div>
+                <form id="withdrawalConfigForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Minimum Withdrawal (₦)</label>
+                            <input type="number" class="form-input" id="minWithdrawal" placeholder="1000">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Maximum Withdrawal (₦)</label>
+                            <input type="number" class="form-input" id="maxWithdrawal" placeholder="50000">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Withdrawal Fee (%)</label>
+                            <input type="number" class="form-input" id="withdrawalFee" placeholder="5" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Bank Edit Fee (Points)</label>
+                            <input type="number" class="form-input" id="bankEditFee" placeholder="3000">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Currency Symbol</label>
+                            <input type="text" class="form-input" id="currencySymbol" placeholder="₦">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Point → Currency Rate (1 point = ?)</label>
+                            <input type="number" class="form-input" id="pointToCurrencyRate" placeholder="1" step="0.01">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Withdrawal Config
+                    </button>
+                </form>
+            </div>
+
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-gift"></i>
+                    Daily Claims Configuration
+                </div>
+                <form id="claimsConfigForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Daily Claims Limit</label>
+                            <input type="number" class="form-input" id="dailyClaimsLimit" placeholder="5">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Minimum Claim Amount</label>
+                            <input type="number" class="form-input" id="minClaimAmount" placeholder="50">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Maximum Claim Amount</label>
+                            <input type="number" class="form-input" id="maxClaimAmount" placeholder="500">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Bonus Claims per Friends</label>
+                            <input type="number" class="form-input" id="bonusClaimsPerFriends" placeholder="2">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Friends Required for Bonus</label>
+                        <input type="number" class="form-input" id="friendsRequiredForBonus" placeholder="10">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Claims Config
+                    </button>
+                </form>
+            </div>
+
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-headset"></i>
+                    Support Configuration
+                </div>
+                <form id="supportConfigForm">
+                    <div class="form-group">
+                        <label class="form-label">Support Username</label>
+                        <input type="text" class="form-input" id="supportUsername" placeholder="@support_username">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Support Config
+                    </button>
+                </form>
+            </div>
+
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-cog"></i>
+                    App Configuration
+                </div>
+                <form id="appConfigForm">
+                    <div class="form-group">
+                        <label class="form-label">App Name</label>
+                        <input type="text" class="form-input" id="appName" placeholder="TGTask">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save App Config
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tasks Tab -->
+        <div id="tasksTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-plus"></i>
+                    Add New Channel
+                </div>
+                <form id="addChannelForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Channel Name</label>
+                            <input type="text" class="form-input" id="channelName" placeholder="Channel Name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Channel Username/ID</label>
+                            <input type="text" class="form-input" id="channelUsername" placeholder="@channelusername or -1001234567890">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Points Reward</label>
+                        <input type="number" class="form-input" id="channelPoints" placeholder="10">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-textarea" id="channelDescription" placeholder="What should users do?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Channel
+                    </button>
+                </form>
+            </div>
+
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-plus"></i>
+                    Add New Group
+                </div>
+                <form id="addGroupForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Group Name</label>
+                            <input type="text" class="form-input" id="groupName" placeholder="Group Name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Group Username/ID</label>
+                            <input type="text" class="form-input" id="groupUsername" placeholder="@groupusername or -1001234567890">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Points Reward</label>
+                        <input type="number" class="form-input" id="groupPoints" placeholder="15">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-textarea" id="groupDescription" placeholder="What should users do?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Group
+                    </button>
+                </form>
+            </div>
+
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-list"></i>
+                    Current Tasks
+                </div>
+                <div id="currentTasks">
+                    <div class="loading">Loading tasks...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Social Tasks Tab -->
+        <div id="socialTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-plus"></i>
+                    Add Social Task (Facebook/WhatsApp)
+                </div>
+                <form id="addSocialTaskForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Platform</label>
+                            <select class="form-select" id="socialPlatform">
+                                <option value="facebook">Facebook</option>
+                                <option value="whatsapp">WhatsApp</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Task Name</label>
+                            <input type="text" class="form-input" id="socialTaskName" placeholder="Page/Group name or short label">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Task Link (URL)</label>
+                            <input type="text" class="form-input" id="socialTaskLink" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Points Reward</label>
+                            <input type="number" class="form-input" id="socialTaskPoints" placeholder="10">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Task Description</label>
+                        <textarea class="form-textarea" id="socialTaskDescription" placeholder="Describe what the user should do..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Social Task
+                    </button>
+                </form>
+            </div>
+
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-list"></i>
+                    Current Social Tasks
+                </div>
+                <div id="socialTasksList">
+                    <div class="loading">Loading social tasks...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="usersTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-users"></i>
+                    User Management
+                </div>
+                <div id="usersList">
+                    <div class="loading">Loading users...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Moderation Tab -->
+        <div id="moderationTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-sliders-h"></i> Adjust User Balance</div>
+                <form id="adjustBalanceForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">User Telegram ID</label>
+                            <input type="number" class="form-input" id="adjUserId" placeholder="e.g. 123456789">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Amount (+/-)</label>
+                            <input type="number" class="form-input" id="adjAmount" placeholder="e.g. 100 or -50">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Reason</label>
+                        <input type="text" class="form-input" id="adjReason" placeholder="Reason (optional)">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Apply Adjustment</button>
+                </form>
+            </div>
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-user-lock"></i> Ban / Unban User</div>
+                <form id="banUserForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">User Telegram ID</label>
+                            <input type="number" class="form-input" id="banUserId" placeholder="e.g. 123456789">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Action</label>
+                            <select class="form-select" id="banAction">
+                                <option value="ban">Ban</option>
+                                <option value="unban">Unban</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Apply</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Broadcast Tab -->
+        <div id="broadcastTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-bullhorn"></i> Send Message</div>
+                <form id="broadcastForm" enctype="multipart/form-data">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Scope</label>
+                            <select class="form-select" id="bcScope">
+                                <option value="all_users">All Users</option>
+                                <option value="single_user">Single User</option>
+                                <option value="channels">Channels (bot is admin)</option>
+                                <option value="groups">Groups (bot is admin)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Target (username or ID)</label>
+                            <input type="text" class="form-input" id="bcTarget" placeholder="@username or 123456 (only for single user)">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Message</label>
+                        <textarea class="form-textarea" id="bcMessage" placeholder="Type your message..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Attach Media (optional)</label>
+                        <input type="file" id="bcMediaFile" accept="image/*,video/*" class="form-input" />
+                    </div>
+                    <button type="submit" class="btn btn-primary">Send</button>
+                </form>
+                <div id="bcResult" style="margin-top:12px"></div>
+            </div>
+        </div>
+
+        <!-- Onboarding Tab -->
+        <div id="onboardingTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-user-check"></i> Mandatory Join Configuration</div>
+                <form id="onboardingConfigForm">
+                    <div class="form-group">
+                        <label class="form-label">Official Channel Username/ID</label>
+                        <input type="text" class="form-input" id="requiredChannel" placeholder="@your_channel or -100...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Sponsor Group Username/ID</label>
+                        <input type="text" class="form-input" id="requiredGroup" placeholder="@your_group or -100...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Welcome Text</label>
+                        <textarea class="form-textarea" id="onboardingWelcome" rows="3" placeholder="Welcome to TGTask. Please join our official channel and sponsor group to continue."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Withdrawals Tab -->
+        <div id="withdrawalsTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-money-bill-wave"></i>
+                    Withdrawal Requests
+                </div>
+                <div id="withdrawalsList">
+                    <div class="loading">Loading withdrawals...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Channels Tab -->
+        <div id="channelsTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-broadcast-tower"></i>
+                    Channel Management
+                </div>
+                <div id="channelsList">
+                    <div class="loading">Loading channels...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Tab -->
+        <div id="groupsTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title">
+                    <i class="fas fa-users"></i>
+                    Group Management
+                </div>
+                <div id="groupsList">
+                    <div class="loading">Loading groups...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+      // Pass Telegram user_id to admin.js via URL if missing
+      (function(){
+        var u = new URL(window.location.href);
+        if (!u.searchParams.get('user_id') && window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+          u.searchParams.set('user_id', window.Telegram.WebApp.initDataUnsafe.user.id);
+          window.history.replaceState({}, '', u.toString());
+        }
+      })();
+    </script>
+    <script src="/admin.js"></script>
+</body>
+</html>
