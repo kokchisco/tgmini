@@ -10,6 +10,7 @@
     "dev:webapp": "nodemon src/webapp/server.js",
     "db:migrate": "node src/database/migrate.js",
     "db:seed": "node src/database/seed.js",
+    "sql": "node scripts/run-sql.js",
     "start:all": "node src/database/migrate.js && concurrently -k -s first -n web,bot -c cyan,magenta \"npm run webapp\" \"npm start\""
   },
   "keywords": ["telegram", "bot", "mini-app", "tasks", "points"],

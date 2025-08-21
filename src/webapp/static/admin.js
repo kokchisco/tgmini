@@ -157,6 +157,8 @@ const loadConfiguration = async () => {
         document.getElementById('bankEditFee').value = data.withdrawalConfig.bankEditFee;
         if (document.getElementById('currencySymbol')) document.getElementById('currencySymbol').value = data.withdrawalConfig.currencySymbol || '₦';
         if (document.getElementById('pointToCurrencyRate')) document.getElementById('pointToCurrencyRate').value = data.withdrawalConfig.pointToCurrencyRate || 1;
+        const wdEnabled = document.getElementById('withdrawalsEnabled');
+        if (wdEnabled) wdEnabled.checked = !!data.withdrawalConfig.withdrawalsEnabled;
         
         document.getElementById('dailyClaimsLimit').value = data.claimsConfig.dailyClaimsLimit;
         document.getElementById('minClaimAmount').value = data.claimsConfig.minClaimAmount;
@@ -525,6 +527,9 @@ const switchTab = (tabName) => {
         case 'refAudit':
             // no initial load
             break;
+        case 'ledger':
+            // no initial load
+            break;
     }
 };
 
@@ -581,7 +586,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             await apiCall('/api/admin/config/withdrawal', {
                 method: 'POST',
-                body: JSON.stringify(formData)
+                body: JSON.stringify({
+                    ...formData,
+                    withdrawalsEnabled: !!document.getElementById('withdrawalsEnabled')?.checked
+                })
             });
             
             tg.showAlert('✅ Withdrawal configuration saved successfully!');
@@ -756,6 +764,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.getElementById('refAuditSummary').innerHTML = showError(err.message || 'Audit failed');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = 'Run Audit'; }
+            }
+        });
+    }
+    // Bind user ledger form
+    const ledgerForm = document.getElementById('userLedgerForm');
+    if (ledgerForm) {
+        ledgerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const tgId = document.getElementById('ledgerUserId').value.trim();
+            if (!tgId) { if (tg && tg.showAlert) tg.showAlert('Enter user Telegram ID'); else alert('Enter user Telegram ID'); return; }
+            const btn = document.getElementById('ledgerRunBtn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+            try {
+                const res = await apiCall('/api/admin/user-ledger', { method: 'POST', body: JSON.stringify({ targetTelegramId: parseInt(tgId, 10) }) });
+                const u = res.user || {};
+                const sum = res.total_points_listed || 0;
+                document.getElementById('ledgerSummary').innerHTML = `User: @${u.username || 'N/A'} (${u.telegram_id}) • Balance: ${u.points} • Total Earned (DB): ${u.total_points_earned} • Listed Sum: ${sum} • Entries: ${res.count || 0}`;
+                const body = document.getElementById('ledgerTableBody');
+                const rows = (res.ledger || []).map(r => `
+                    <tr>
+                        <td>${r.source}</td>
+                        <td>${formatNumber(r.points)}</td>
+                        <td>${formatDate(r.earned_at)}</td>
+                    </tr>`);
+                body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="3" style="text-align:center; opacity:0.7;">No data</td></tr>';
+            } catch (err) {
+                document.getElementById('ledgerSummary').innerHTML = showError(err.message || 'Failed to load ledger');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Run Ledger'; }
             }
         });
     }

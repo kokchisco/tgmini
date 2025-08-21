@@ -855,7 +855,8 @@ app.get('/api/admin/config', async (req, res) => {
                 withdrawalFee: parseFloat(await getConfig(req.db, 'withdrawalFee', process.env.WITHDRAWAL_FEE_PERCENTAGE || 5)),
                 bankEditFee: await getIntConfig(req.db, 'bankEditFee', parseInt(process.env.BANK_EDIT_FEE) || 3000),
                 currencySymbol: await getConfig(req.db, 'currencySymbol', process.env.CURRENCY_SYMBOL || '₦'),
-                pointToCurrencyRate: parseFloat(await getConfig(req.db, 'pointToCurrencyRate', process.env.POINT_TO_CURRENCY_RATE || 1))
+                pointToCurrencyRate: parseFloat(await getConfig(req.db, 'pointToCurrencyRate', process.env.POINT_TO_CURRENCY_RATE || 1)),
+                withdrawalsEnabled: (await getConfig(req.db, 'withdrawalsEnabled', 'true')) !== 'false'
             },
             claimsConfig: {
                 dailyClaimsLimit: await getIntConfig(req.db, 'dailyClaimsLimit', parseInt(process.env.DAILY_CLAIMS_LIMIT) || 5),
@@ -948,8 +949,8 @@ app.post('/api/admin/config/points', async (req, res) => {
 
 app.post('/api/admin/config/withdrawal', async (req, res) => {
     try {
-        const { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate } = req.body;
-        await setConfig(req.db, { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate });
+        const { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate, withdrawalsEnabled } = req.body;
+        await setConfig(req.db, { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate, withdrawalsEnabled: withdrawalsEnabled ? 'true' : 'false' });
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating withdrawal config:', error);
@@ -1014,6 +1015,53 @@ app.get('/api/admin/users', async (req, res) => {
         res.json({ users });
     } catch (error) {
         console.error('Error loading users:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Admin: user ledger (earnings history consolidated)
+app.post('/api/admin/user-ledger', async (req, res) => {
+    try {
+        if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
+        const targetTelegramId = parseInt((req.body && req.body.targetTelegramId) || (req.query && req.query.targetTelegramId));
+        if (!targetTelegramId || !Number.isFinite(targetTelegramId)) {
+            return res.status(400).json({ error: 'Provide numeric targetTelegramId' });
+        }
+        const user = await userService.getUserByTelegramId(req.db, targetTelegramId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const rows = await req.db.all(`
+            SELECT * FROM (
+                SELECT 'Channel Join' AS source, uc.points_earned AS points, uc.joined_at AS earned_at
+                FROM user_channel_joins uc WHERE uc.user_id = ?
+                UNION ALL
+                SELECT 'Group Join' AS source, ug.points_earned AS points, ug.joined_at AS earned_at
+                FROM user_group_joins ug WHERE ug.user_id = ?
+                UNION ALL
+                SELECT CASE WHEN ch.source = 'referral' THEN 'Invite Reward' ELSE 'Daily Reward' END AS source, ch.points_earned AS points, ch.claimed_at AS earned_at
+                FROM claims_history ch WHERE ch.telegram_id = ?
+                UNION ALL
+                SELECT ('Social Task: ' || COALESCE(st.task_name, st.platform)) AS source, usc.points_earned AS points, usc.completed_at AS earned_at
+                FROM user_social_claims usc JOIN social_tasks st ON st.id = usc.social_task_id
+                WHERE usc.user_id = ? AND usc.status = 'completed'
+                UNION ALL
+                SELECT 'Admin Credit' AS source, aa.amount AS points, aa.created_at AS earned_at
+                FROM admin_audit aa
+                WHERE aa.target_telegram_id = ? AND aa.action = 'adjust_balance' AND aa.amount > 0
+            ) t
+            ORDER BY earned_at DESC
+            LIMIT 500
+        `, [user.id, user.id, targetTelegramId, user.id, targetTelegramId]);
+
+        const total = (rows || []).reduce((sum, r) => sum + (parseInt(r.points, 10) || 0), 0);
+        res.json({
+            user: { id: user.id, telegram_id: user.telegram_id, username: user.username, first_name: user.first_name, last_name: user.last_name, points: user.points, total_points_earned: user.total_points_earned },
+            total_points_listed: total,
+            count: rows ? rows.length : 0,
+            ledger: rows || []
+        });
+    } catch (err) {
+        console.error('Error loading user ledger:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1743,6 +1791,12 @@ app.post('/api/withdraw', async (req, res) => {
             return res.status(403).json({ error: 'Account banned' });
         }
 
+        // Feature flag: allow admin to disable withdrawals
+        const withdrawalsEnabledCfg = await getConfig(req.db, 'withdrawalsEnabled', 'true');
+        if (String(withdrawalsEnabledCfg) === 'false') {
+            return res.status(403).json({ error: 'Withdrawals are closed for now. Please try again later.' });
+        }
+
         // Treat amounts as points (no currency symbol)
         const minWithdrawal = await getIntConfig(req.db, 'minWithdrawal', parseInt(process.env.MIN_WITHDRAWAL_AMOUNT) || 1000);
         const maxWithdrawal = await getIntConfig(req.db, 'maxWithdrawal', parseInt(process.env.MAX_WITHDRAWAL_AMOUNT) || 50000);
@@ -1769,10 +1823,14 @@ app.post('/api/withdraw', async (req, res) => {
             return res.status(400).json({ error: 'Please add bank details first' });
         }
 
-        // Enforce one withdrawal per day
+        // Prevent multiple submissions while one is pending
+        const hasPending = await req.db.get(`SELECT id FROM withdrawals WHERE telegram_id = ? AND status = 'pending' LIMIT 1`, [telegramId]);
+        if (hasPending) return res.status(400).json({ error: 'You already have a pending withdrawal' });
+
+        // Enforce one withdrawal per day (works on both SQLite and Postgres)
         const todayReq = await req.db.get(`
             SELECT COUNT(*) as count FROM withdrawals 
-            WHERE telegram_id = ? AND DATE(created_at) = DATE('now')
+            WHERE telegram_id = ? AND DATE(created_at) = DATE(CURRENT_TIMESTAMP)
         `, [telegramId]);
         if (todayReq && todayReq.count > 0) {
             return res.status(400).json({ error: 'You can only submit one withdrawal per day' });
@@ -1797,16 +1855,27 @@ app.post('/api/withdraw', async (req, res) => {
             if (!chOk || !grOk) return res.status(403).json({ error: 'Join the community first' });
         }
 
-        // Create withdrawal request
-        await req.db.run(`
-            INSERT INTO withdrawals (telegram_id, amount, status, created_at)
-            VALUES (?, ?, 'pending', datetime('now'))
-        `, [telegramId, amount]);
+        // Create withdrawal atomically and deduct points under a transaction to avoid race conditions
+        await req.db.transaction(async (tx) => {
+            // Lock user row where supported (Postgres); SQLite will ignore FOR UPDATE gracefully
+            try { await tx.get('SELECT id FROM users WHERE id = ? FOR UPDATE', [user.id]); } catch (_) {}
 
-        // Deduct points from user
-        await req.db.run(`
-            UPDATE users SET points = points - ? WHERE id = ?
-        `, [amount, user.id]);
+            // Re-check pending and today within tx
+            const p = await tx.get(`SELECT id FROM withdrawals WHERE telegram_id = ? AND status = 'pending' LIMIT 1`, [telegramId]);
+            if (p) throw new Error('You already have a pending withdrawal');
+            const t = await tx.get(`SELECT COUNT(*) as count FROM withdrawals WHERE telegram_id = ? AND DATE(created_at) = DATE(CURRENT_TIMESTAMP)`, [telegramId]);
+            if (t && t.count > 0) throw new Error('You can only submit one withdrawal per day');
+
+            // Ensure sufficient balance at commit time
+            const freshUser = await tx.get('SELECT points FROM users WHERE id = ?', [user.id]);
+            if (!freshUser || (freshUser.points || 0) < amount) throw new Error('Insufficient points');
+
+            await tx.run(`
+                INSERT INTO withdrawals (telegram_id, amount, status, created_at)
+                VALUES (?, ?, 'pending', datetime('now'))
+            `, [telegramId, amount]);
+            await tx.run(`UPDATE users SET points = points - ?, updated_at = datetime('now') WHERE id = ?`, [amount, user.id]);
+        });
 
         // Notify admin of new withdrawal request
         const adminId = parseInt(process.env.ADMIN_USER_ID || '');
@@ -1816,7 +1885,9 @@ app.post('/api/withdraw', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('Error creating withdrawal:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        const msg = error && error.message ? error.message : 'Internal server error';
+        const code = msg === 'Insufficient points' || msg.includes('pending withdrawal') || msg.includes('one withdrawal per day') ? 400 : 500;
+        res.status(code).json({ error: msg });
     }
 });
 

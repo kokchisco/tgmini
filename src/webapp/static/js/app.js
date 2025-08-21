@@ -481,7 +481,7 @@ const pageLoaders = {
         const mainContent = document.getElementById('main-content');
         // Ensure fresh user data for accurate balance
         try { await loadUserData(); } catch (e) {}
-        const cfg = await fetch('/api/admin/config').then(r=>r.json()).catch(()=>({ withdrawalConfig: { currencySymbol: '₦', pointToCurrencyRate: 1, minWithdrawal: 1000 } }));
+        const cfg = await fetch('/api/admin/config').then(r=>r.json()).catch(()=>({ withdrawalConfig: { currencySymbol: '₦', pointToCurrencyRate: 1, minWithdrawal: 1000, withdrawalsEnabled: true } }));
         const curr = (cfg && cfg.withdrawalConfig && cfg.withdrawalConfig.currencySymbol) || '₦';
         const rate = (cfg && cfg.withdrawalConfig && parseFloat(cfg.withdrawalConfig.pointToCurrencyRate)) || 1;
         const minWithdrawalPoints = (cfg && cfg.withdrawalConfig && parseInt(cfg.withdrawalConfig.minWithdrawal)) || 1000;
@@ -523,6 +523,14 @@ const pageLoaders = {
         await enforceCommunityOrRedirect('withdraw');
         await loadWithdrawData();
         setupWithdrawForm();
+        // Disable form if withdrawals are disabled by admin
+        const enabled = cfg && cfg.withdrawalConfig && cfg.withdrawalConfig.withdrawalsEnabled !== false;
+        if (!enabled) {
+            const form = document.getElementById('withdrawForm');
+            const btn = document.querySelector('#withdrawForm button[type="submit"]');
+            if (form) Array.from(form.elements).forEach(el => el.disabled = true);
+            if (btn) btn.textContent = 'Withdrawals are closed';
+        }
         const amt = document.getElementById('withdrawAmount');
         const conv = document.getElementById('withdrawConverted');
         const toMoney = (points) => {

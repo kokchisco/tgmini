@@ -361,6 +361,7 @@
             <div class="admin-tab" data-tab="broadcast">📣 Broadcast</div>
             <div class="admin-tab" data-tab="onboarding">✅ Onboarding</div>
             <div class="admin-tab" data-tab="refAudit">🔍 Referral Audit</div>
+            <div class="admin-tab" data-tab="ledger">📒 User Ledger</div>
         </div>
 
         <!-- Dashboard Tab -->
@@ -465,6 +466,10 @@
                             <label class="form-label">Point → Currency Rate (1 point = ?)</label>
                             <input type="number" class="form-input" id="pointToCurrencyRate" placeholder="1" step="0.01">
                         </div>
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="withdrawalsEnabled" style="width:18px;height:18px;">
+                        <label class="form-label" for="withdrawalsEnabled" style="margin:0;">Enable withdrawals</label>
                     </div>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> Save Withdrawal Config
@@ -811,6 +816,42 @@
                         </thead>
                         <tbody id="refAuditTableBody">
                             <tr><td colspan="6" style="text-align:center; opacity:0.7;">No data</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Ledger Tab -->
+        <div id="ledgerTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-book"></i> User Ledger Lookup</div>
+                <form id="userLedgerForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">User Telegram ID</label>
+                            <input type="number" class="form-input" id="ledgerUserId" placeholder="e.g. 123456789">
+                        </div>
+                        <div class="form-group" style="display:flex;align-items:flex-end;">
+                            <button type="submit" class="btn btn-primary" id="ledgerRunBtn">Run Ledger</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-list"></i> Results</div>
+                <div id="ledgerSummary" style="margin-bottom:12px;"></div>
+                <div class="table-container table-scroll">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Points</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ledgerTableBody">
+                            <tr><td colspan="3" style="text-align:center; opacity:0.7;">No data</td></tr>
                         </tbody>
                     </table>
                 </div>
