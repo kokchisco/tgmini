@@ -9,7 +9,8 @@ const userService = require('../services/userService');
 const taskService = require('../services/taskService');
 
 const app = express();
-const PORT = process.env.WEBAPP_PORT || 3001;
+// Prefer platform-provided PORT (Railway/Heroku). Fallback to WEBAPP_PORT or 3001.
+const PORT = process.env.PORT || process.env.WEBAPP_PORT || 3001;
 
 // Trust proxy for ngrok
 app.set('trust proxy', 1);
