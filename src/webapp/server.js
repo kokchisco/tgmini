@@ -70,22 +70,41 @@ app.use(async (req, res, next) => {
 
 // Config helpers
 async function ensureConfigTable(db){
-    // Migration created: admin_config(config_key TEXT UNIQUE, config_value TEXT)
-    await db.run(`CREATE TABLE IF NOT EXISTS admin_config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        config_key TEXT UNIQUE NOT NULL,
-        config_value TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+    // Create table compatible with both SQLite and Postgres
+    const isPg = !!db.isPostgres;
+    const sql = isPg
+        ? `CREATE TABLE IF NOT EXISTS admin_config (
+                id SERIAL PRIMARY KEY,
+                config_key TEXT UNIQUE NOT NULL,
+                config_value TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+           )`
+        : `CREATE TABLE IF NOT EXISTS admin_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                config_key TEXT UNIQUE NOT NULL,
+                config_value TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+           )`;
+    await db.run(sql);
 }
 
 async function setConfig(db, entries){
     await ensureConfigTable(db);
-    const stmt = `INSERT INTO admin_config (config_key, config_value) VALUES (?, ?) 
-                  ON CONFLICT(config_key) DO UPDATE SET config_value=excluded.config_value, updated_at=datetime('now')`;
-    for (const [k,v] of Object.entries(entries)){
-        await db.run(stmt, [k, String(v)]);
+    const isPg = !!db.isPostgres;
+    if (isPg) {
+        const stmt = `INSERT INTO admin_config (config_key, config_value) VALUES (?, ?) 
+                      ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = CURRENT_TIMESTAMP`;
+        for (const [k,v] of Object.entries(entries)){
+            await db.run(stmt, [k, String(v)]);
+        }
+    } else {
+        const stmt = `INSERT INTO admin_config (config_key, config_value) VALUES (?, ?) 
+                      ON CONFLICT(config_key) DO UPDATE SET config_value=excluded.config_value, updated_at=datetime('now')`;
+        for (const [k,v] of Object.entries(entries)){
+            await db.run(stmt, [k, String(v)]);
+        }
     }
 }
 
