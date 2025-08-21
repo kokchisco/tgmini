@@ -32,12 +32,24 @@ app.use(helmet({
     }
 }));
 
-// Rate limiting
+// Rate limiting (apply to API only; configurable and proxy-aware)
+const rateLimitDisabled = String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase() === 'true';
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100 // limit each IP to 100 requests per windowMs
+    windowMs: 60 * 1000, // 1 minute window
+    max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 1000, // generous default for webapp traffic
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+        // Respect first X-Forwarded-For IP behind proxies
+        const xf = req.headers['x-forwarded-for'];
+        if (typeof xf === 'string' && xf.length > 0) return xf.split(',')[0].trim();
+        if (Array.isArray(xf) && xf.length > 0) return String(xf[0]).trim();
+        return req.ip;
+    }
 });
-app.use(limiter);
+if (!rateLimitDisabled) {
+    app.use('/api', limiter);
+}
 
 // CORS
 app.use(cors({
