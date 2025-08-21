@@ -160,7 +160,19 @@ async function finalizeDueSocialClaims(db, userId){
 app.get('/api/user/:telegramId', async (req, res) => {
     try {
         const { telegramId } = req.params;
-        const user = await userService.getUserByTelegramId(req.db, parseInt(telegramId));
+        let user = await userService.getUserByTelegramId(req.db, parseInt(telegramId));
+        // Fallback: if user doesn't exist yet, auto-create so webapp can load without /start
+        if (!user) {
+            try {
+                await userService.getOrCreateUser(req.db, {
+                    telegram_id: parseInt(telegramId),
+                    username: null,
+                    first_name: null,
+                    last_name: null
+                });
+                user = await userService.getUserByTelegramId(req.db, parseInt(telegramId));
+            } catch (e) { /* ignore and return 404 below */ }
+        }
         
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
