@@ -1020,18 +1020,29 @@ app.get('/api/admin/users', async (req, res) => {
 
 app.get('/api/admin/withdrawals', async (req, res) => {
     try {
-        const withdrawals = await req.db.all(`
-            SELECT w.*, u.first_name as user_name, b.account_name, b.bank_name
-            FROM withdrawals w
-            LEFT JOIN users u ON w.telegram_id = u.telegram_id
-            LEFT JOIN bank_details b ON w.telegram_id = b.telegram_id
-            ORDER BY w.created_at DESC
-        `);
+        const status = (req.query && req.query.status) || 'all';
+        let where = '';
+        const params = [];
+        if (status === 'pending' || status === 'completed' || status === 'rejected') {
+            where = 'WHERE w.status = ?';
+            params.push(status);
+        }
+        const withdrawals = await req.db.all(
+            `SELECT w.*, u.first_name as user_name, b.account_name, b.account_number, b.bank_name
+             FROM withdrawals w
+             LEFT JOIN users u ON w.telegram_id = u.telegram_id
+             LEFT JOIN bank_details b ON w.telegram_id = b.telegram_id
+             ${where}
+             ORDER BY w.created_at DESC`,
+            params
+        );
         
         // Format bank details
         const formattedWithdrawals = withdrawals.map(w => ({
             ...w,
-            bank_details: w.account_name && w.bank_name ? `${w.account_name} - ${w.bank_name}` : null
+            bank_details: (w.account_name || w.bank_name || w.account_number)
+                ? `${w.account_name || ''} ${w.account_number ? `(${w.account_number})` : ''} - ${w.bank_name || ''}`.trim()
+                : null
         }));
         
         res.json({ withdrawals: formattedWithdrawals });
@@ -1317,7 +1328,12 @@ app.post('/api/verify-onboarding-joins', async (req, res) => {
             }).then(r => r.json()).catch(() => null);
             groupOk = g && g.ok && ['member', 'administrator', 'creator'].includes(g.result?.status);
         }
-        res.json({ ok: channelOk && groupOk, channelOk, groupOk });
+        const ok = channelOk && groupOk;
+        // If onboarding satisfied, try to finalize any pending referral reward
+        if (ok) {
+            try { await userService.finalizeReferralIfEligible(req.db, parseInt(telegramId)); } catch (_) {}
+        }
+        res.json({ ok, channelOk, groupOk });
     } catch (e) {
         console.error('Error verifying onboarding joins:', e);
         res.status(500).json({ error: 'Internal server error' });
@@ -1445,6 +1461,59 @@ app.post('/api/admin/broadcast', async (req, res) => {
         res.json({ success: true, sent, failed, jobId });
     } catch (err) {
         console.error('Error broadcasting:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Admin: Audit referral community membership
+app.post('/api/admin/referral-audit', async (req, res) => {
+    try {
+        if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
+        const refTgId = parseInt((req.body && req.body.referrerTelegramId) || (req.query && req.query.referrerTelegramId));
+        if (!refTgId || !Number.isFinite(refTgId)) return res.status(400).json({ error: 'Provide numeric referrerTelegramId' });
+
+        const referrer = await userService.getUserByTelegramId(req.db, refTgId);
+        if (!referrer) return res.status(404).json({ error: 'Referrer not found' });
+
+        // Fetch invitees
+        const invitees = await req.db.all(
+            `SELECT id, telegram_id, username, first_name, last_name, created_at 
+             FROM users WHERE referred_by = ? ORDER BY created_at DESC LIMIT 1000`,
+            [referrer.id]
+        );
+
+        const { channelIdentifier, groupIdentifier } = await getRequiredChats(req.db);
+        const botToken = process.env.BOT_TOKEN;
+        const checkMember = async (telegramId, chatId) => {
+            if (!chatId) return true; // if not configured, treat as ok
+            try {
+                // Try numeric first
+                const j = await fetch(`https://api.telegram.org/bot${botToken}/getChatMember`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: parseInt(chatId), user_id: parseInt(telegramId) }) }).then(r=>r.json()).catch(()=>null);
+                if (j && j.ok) return ['member','administrator','creator'].includes(j.result?.status);
+            } catch(_) {}
+            try {
+                // Fallback username identifier
+                const cid = typeof chatId === 'string' ? (chatId.startsWith('@') ? chatId : `@${chatId}`) : chatId;
+                const k = await fetch(`https://api.telegram.org/bot${botToken}/getChatMember`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: cid, user_id: parseInt(telegramId) }) }).then(r=>r.json()).catch(()=>null);
+                return k && k.ok && ['member','administrator','creator'].includes(k.result?.status);
+            } catch(_) { return false; }
+        };
+
+        const members = [];
+        const nonMembers = [];
+        for (const u of invitees) {
+            const chOk = await checkMember(u.telegram_id, channelIdentifier);
+            const grOk = await checkMember(u.telegram_id, groupIdentifier);
+            const ok = chOk && grOk;
+            const item = { telegram_id: u.telegram_id, username: u.username, first_name: u.first_name, last_name: u.last_name, created_at: u.created_at, channelOk: chOk, groupOk: grOk };
+            if (ok) members.push(item); else nonMembers.push(item);
+            // brief delay to be kind to Telegram API in large lists
+            await new Promise(r => setTimeout(r, 60));
+        }
+
+        res.json({ referrer: { id: referrer.id, telegram_id: referrer.telegram_id, username: referrer.username }, counts: { total: invitees.length, members: members.length, nonMembers: nonMembers.length }, members, nonMembers });
+    } catch (err) {
+        console.error('Error in referral-audit:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1860,6 +1929,8 @@ app.post('/api/claim-reward', async (req, res) => {
             VALUES (?, ?, datetime('now'), 'daily')
         `, [telegramId, pointsEarned]);
 
+        // If user has a pending referral and has at least engaged (claimed), finalize referral too
+        try { await userService.finalizeReferralIfEligible(req.db, parseInt(telegramId)); } catch (_) {}
         res.json({ success: true, pointsEarned });
     } catch (error) {
         console.error('Error claiming reward:', error);

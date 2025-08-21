@@ -308,7 +308,9 @@ const loadUsers = async () => {
 // Load withdrawals
 const loadWithdrawals = async () => {
     try {
-        const data = await apiCall('/api/admin/withdrawals');
+        const sel = document.getElementById('withdrawalsFilter');
+        const status = sel ? sel.value : 'all';
+        const data = await apiCall(`/api/admin/withdrawals?status=${encodeURIComponent(status)}`);
         
         let withdrawalsHtml = `
             <div class="table-container table-scroll">
@@ -334,8 +336,8 @@ const loadWithdrawals = async () => {
                 withdrawalsHtml += `
                     <tr>
                         <td>${withdrawal.user_name || 'Unknown'}</td>
-                        <td>₦${formatNumber(withdrawal.amount)}</td>
-                        <td>${withdrawal.bank_details || 'N/A'}</td>
+                        <td>${formatNumber(withdrawal.amount)} pts</td>
+                        <td style="white-space:normal; word-break:break-word;">${withdrawal.bank_details || 'N/A'}</td>
                         <td><span class="status-badge ${statusClass}">${withdrawal.status}</span></td>
                         <td>${formatDate(withdrawal.created_at)}</td>
                         <td>
@@ -519,6 +521,9 @@ const switchTab = (tabName) => {
             break;
         case 'onboarding':
             loadOnboarding();
+            break;
+        case 'refAudit':
+            // no initial load
             break;
     }
 };
@@ -718,6 +723,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initial tab
     // Load initial dashboard
     loadDashboard();
+    // Bind referral audit form
+    const refAuditForm = document.getElementById('refAuditForm');
+    if (refAuditForm) {
+        refAuditForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const refTgId = document.getElementById('refAuditRefTgId').value.trim();
+            if (!refTgId) { if (tg && tg.showAlert) tg.showAlert('Enter referrer Telegram ID'); else alert('Enter referrer Telegram ID'); return; }
+            const btn = document.getElementById('refAuditRunBtn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Auditing...'; }
+            try {
+                const res = await apiCall('/api/admin/referral-audit', { method: 'POST', body: JSON.stringify({ referrerTelegramId: parseInt(refTgId, 10) }) });
+                const sum = res.counts || { total: 0, members: 0, nonMembers: 0 };
+                const pct = sum.total > 0 ? Math.round((sum.members / sum.total) * 100) : 0;
+                const ref = res.referrer || {};
+                document.getElementById('refAuditSummary').innerHTML = `Referrer: @${ref.username || 'N/A'} (${ref.telegram_id}) • Total: ${sum.total} • Members: ${sum.members} • Not Members: ${sum.nonMembers} • Active %: ${pct}%`;
+                const body = document.getElementById('refAuditTableBody');
+                const rows = [];
+                const renderRow = (u, good) => `
+                    <tr>
+                        <td>${(u.first_name || '') + ' ' + (u.last_name || '')}</td>
+                        <td>@${u.username || 'N/A'}</td>
+                        <td>${u.telegram_id}</td>
+                        <td>${formatDate(u.created_at)}</td>
+                        <td><span class="status-badge ${u.channelOk ? 'status-active' : 'status-inactive'}">${u.channelOk ? 'Yes' : 'No'}</span></td>
+                        <td><span class="status-badge ${u.groupOk ? 'status-active' : 'status-inactive'}">${u.groupOk ? 'Yes' : 'No'}</span></td>
+                    </tr>`;
+                (res.members || []).forEach(u => rows.push(renderRow(u, true)));
+                (res.nonMembers || []).forEach(u => rows.push(renderRow(u, false)));
+                body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="6" style="text-align:center; opacity:0.7;">No data</td></tr>';
+            } catch (err) {
+                document.getElementById('refAuditSummary').innerHTML = showError(err.message || 'Audit failed');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Run Audit'; }
+            }
+        });
+    }
 });
 async function loadOnboarding() {
     try {
@@ -949,6 +990,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('bcResult').innerHTML = showError(err.message || 'Broadcast failed');
             }
         });
+    }
+    // Withdrawals filter change
+    const withdrawFilter = document.getElementById('withdrawalsFilter');
+    if (withdrawFilter && !withdrawFilter._bound) {
+        withdrawFilter.addEventListener('change', () => {
+            loadWithdrawals();
+        });
+        withdrawFilter._bound = true;
     }
 });
 

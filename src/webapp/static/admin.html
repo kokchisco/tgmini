@@ -360,6 +360,7 @@
             <div class="admin-tab" data-tab="moderation">🛡️ Moderation</div>
             <div class="admin-tab" data-tab="broadcast">📣 Broadcast</div>
             <div class="admin-tab" data-tab="onboarding">✅ Onboarding</div>
+            <div class="admin-tab" data-tab="refAudit">🔍 Referral Audit</div>
         </div>
 
         <!-- Dashboard Tab -->
@@ -777,12 +778,62 @@
             </div>
         </div>
 
+        <!-- Referral Audit Tab -->
+        <div id="refAuditTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-search"></i> Referral Community Audit</div>
+                <form id="refAuditForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Referrer Telegram ID</label>
+                            <input type="number" class="form-input" id="refAuditRefTgId" placeholder="e.g. 123456789">
+                        </div>
+                        <div class="form-group" style="display:flex;align-items:flex-end;">
+                            <button type="submit" class="btn btn-primary" id="refAuditRunBtn">Run Audit</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-list-ul"></i> Results</div>
+                <div id="refAuditSummary" style="margin-bottom:12px;"></div>
+                <div class="table-container table-scroll">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Username</th>
+                                <th>Telegram ID</th>
+                                <th>Joined</th>
+                                <th>Channel</th>
+                                <th>Group</th>
+                            </tr>
+                        </thead>
+                        <tbody id="refAuditTableBody">
+                            <tr><td colspan="6" style="text-align:center; opacity:0.7;">No data</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- Withdrawals Tab -->
         <div id="withdrawalsTab" class="tab-content">
             <div class="config-card">
                 <div class="config-title">
                     <i class="fas fa-money-bill-wave"></i>
                     Withdrawal Requests
+                </div>
+                <div class="form-row" style="margin-bottom:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Filter by Status</label>
+                        <select id="withdrawalsFilter" class="form-select">
+                            <option value="all">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="completed">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="withdrawalsList">
                     <div class="loading">Loading withdrawals...</div>

@@ -27,21 +27,26 @@ class UserService {
             );
 
             if (referrerIdRow) {
-                await this.incrementFriendsInvited(database, referrerIdRow.id);
-                // Notify referrer best-effort
-                try {
-                    const botToken = process.env.BOT_TOKEN;
-                    const ref = await database.get('SELECT telegram_id FROM users WHERE id = ?', [referrerIdRow.id]);
-                    const pointsRow = await database.get("SELECT config_value AS v FROM admin_config WHERE config_key = 'friendInvitePoints'");
-                    const credit = parseInt(pointsRow && pointsRow.v ? pointsRow.v : (process.env.POINTS_PER_FRIEND_INVITE || 25));
-                    if (botToken && ref && ref.telegram_id && Number.isFinite(credit) && credit > 0) {
-                        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ chat_id: ref.telegram_id, text: `🎉 New invite joined! You earned ${credit} points.` })
-                        });
-                    }
-                } catch (_) {}
+                // Record pending invitation (no immediate credit)
+                const existing = await database.get(
+                    'SELECT id, status FROM friend_invitations WHERE inviter_id = ? AND invitee_telegram_id = ?',
+                    [referrerIdRow.id, userData.telegram_id]
+                );
+                if (existing) {
+                    await database.run(
+                        `UPDATE friend_invitations 
+                         SET invitee_username = ?, 
+                             status = CASE WHEN status = 'completed' THEN status ELSE 'pending' END
+                         WHERE id = ?`,
+                        [userData.username || null, existing.id]
+                    );
+                } else {
+                    await database.run(
+                        `INSERT INTO friend_invitations (inviter_id, invitee_telegram_id, invitee_username, status)
+                         VALUES (?, ?, ?, 'pending')`,
+                        [referrerIdRow.id, userData.telegram_id, userData.username || null]
+                    );
+                }
             }
 
             return await database.get('SELECT * FROM users WHERE id = ?', [result.id]);
@@ -66,14 +71,12 @@ class UserService {
 
             await database.transaction(async (tx) => {
                 await tx.run('UPDATE users SET referred_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND referred_by IS NULL', [refRow.id, newUser.id]);
-                await this.incrementFriendsInvited(tx, refRow.id);
-                // Credit referrer points from config
-                const friendInvitePoints = await tx.get("SELECT config_value as v FROM admin_config WHERE config_key = 'friendInvitePoints'");
-                const credit = parseInt(friendInvitePoints && friendInvitePoints.v ? friendInvitePoints.v : (process.env.POINTS_PER_FRIEND_INVITE || 25));
-                if (Number.isFinite(credit) && credit > 0) {
-                    await tx.run('UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [credit, credit, refRow.id]);
-                    // Log to claims_history as referral credit
-                    await tx.run('INSERT INTO claims_history (telegram_id, points_earned, claimed_at, source) VALUES (?, ?, datetime(\'now\'), \"referral\")', [referrerTelegramId, credit]);
+                // Create or update a pending invitation record; do not credit yet
+                const ex = await tx.get('SELECT id, status FROM friend_invitations WHERE inviter_id = ? AND invitee_telegram_id = ?', [refRow.id, newUserTelegramId]);
+                if (ex) {
+                    await tx.run(`UPDATE friend_invitations SET status = CASE WHEN status = 'completed' THEN status ELSE 'pending' END WHERE id = ?`, [ex.id]);
+                } else {
+                    await tx.run(`INSERT INTO friend_invitations (inviter_id, invitee_telegram_id, status) VALUES (?, ?, 'pending')`, [refRow.id, newUserTelegramId]);
                 }
             });
             return true;
@@ -376,6 +379,56 @@ class UserService {
         } catch (error) {
             console.error('Error in checkDailyLimit:', error);
             throw error;
+        }
+    }
+
+    async finalizeReferralIfEligible(database, inviteeTelegramId) {
+        try {
+            if (!inviteeTelegramId) return false;
+            // Use referred_by to resolve the inviter
+            const userRow = await database.get('SELECT referred_by FROM users WHERE telegram_id = ?', [inviteeTelegramId]);
+            if (!userRow || !userRow.referred_by) return false;
+            const inviter = await database.get('SELECT id, telegram_id FROM users WHERE id = ?', [userRow.referred_by]);
+            if (!inviter) return false;
+            const pending = await database.get(
+                'SELECT id, status FROM friend_invitations WHERE inviter_id = ? AND invitee_telegram_id = ? ORDER BY id DESC',
+                [inviter.id, inviteeTelegramId]
+            );
+            if (!pending || pending.status === 'completed') return false;
+            const pointsRow = await database.get("SELECT config_value AS v FROM admin_config WHERE config_key = 'friendInvitePoints'");
+            const credit = parseInt(pointsRow && pointsRow.v ? pointsRow.v : (process.env.POINTS_PER_FRIEND_INVITE || 25));
+            if (!Number.isFinite(credit) || credit <= 0) return false;
+            await database.transaction(async (tx) => {
+                await tx.run(
+                    `UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ?, friends_invited = friends_invited + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                    [credit, credit, inviter.id]
+                );
+                await tx.run(
+                    `UPDATE friend_invitations SET status = 'completed', points_earned = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                    [credit, pending.id]
+                );
+                if (inviter.telegram_id) {
+                    await tx.run(
+                        `INSERT INTO claims_history (telegram_id, points_earned, claimed_at, source) VALUES (?, ?, CURRENT_TIMESTAMP, 'referral')`,
+                        [inviter.telegram_id, credit]
+                    );
+                }
+            });
+            // Notify inviter best-effort
+            try {
+                const botToken = process.env.BOT_TOKEN;
+                if (botToken && inviter.telegram_id) {
+                    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: inviter.telegram_id, text: `🎉 Your referral completed onboarding! You earned ${credit} points.` })
+                    });
+                }
+            } catch (_) {}
+            return true;
+        } catch (error) {
+            console.error('Error in finalizeReferralIfEligible:', error);
+            return false;
         }
     }
 }
