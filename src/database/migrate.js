@@ -15,6 +15,14 @@ if (!fs.existsSync(resolvedDir)) {
 
 const db = new sqlite3.Database(resolvedDbPath);
 
+const shouldSeedSamples = (() => {
+    const envFlag = String(process.env.SEED_SAMPLES || '').trim().toLowerCase();
+    if (envFlag === 'true' || envFlag === '1' || envFlag === 'yes') return true;
+    if (envFlag === 'false' || envFlag === '0' || envFlag === 'no') return false;
+    // default: seed only in non-production
+    return (process.env.NODE_ENV || 'development') !== 'production';
+})();
+
 // Create tables
 const createTables = () => {
     return new Promise((resolve, reject) => {
@@ -301,8 +309,20 @@ const createTables = () => {
     });
 };
 
-// Seed initial data
-const seedData = () => {
+// Seed initial data (only when enabled and tables are empty)
+const seedData = async () => {
+    // Check if tables already have data
+    const hasAny = await new Promise((resolve) => {
+        db.serialize(() => {
+            let channelsCount = 0, groupsCount = 0;
+            db.get('SELECT COUNT(*) AS c FROM channels', (e, r) => { channelsCount = (r && r.c) || 0; doneOne(); });
+            db.get('SELECT COUNT(*) AS c FROM groups', (e, r) => { groupsCount = (r && r.c) || 0; doneOne(); });
+            let pending = 2;
+            function doneOne(){ if(--pending===0) resolve((channelsCount>0) || (groupsCount>0)); }
+        });
+    });
+    if (hasAny) return; // do not seed if data exists
+    if (!shouldSeedSamples) return; // only seed when enabled
     return new Promise((resolve, reject) => {
         // Insert sample channels
         const sampleChannels = [
@@ -380,9 +400,14 @@ const runMigration = async () => {
         await createTables();
         console.log('Tables created successfully!');
         
-        console.log('Seeding initial data...');
-        await seedData();
-        console.log('Initial data seeded successfully!');
+        // Seed only when enabled and tables empty
+        if (shouldSeedSamples) {
+            console.log('Seeding initial data (enabled)...');
+            await seedData();
+            console.log('Initial data seeding completed (or skipped if not empty).');
+        } else {
+            console.log('Sample data seeding disabled.');
+        }
         
         console.log('Database migration completed!');
         db.close();
