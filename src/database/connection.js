@@ -79,10 +79,21 @@ class Database {
         return s;
     }
 
+    _convertParamsForPostgres(sql, params) {
+        // Convert positional '?' to $1, $2, ... for pg
+        if (!params || params.length === 0) return { text: sql, params };
+        let i = 0;
+        const text = String(sql).replace(/\?/g, () => {
+            i += 1; return `$${i}`;
+        });
+        return { text, params };
+    }
+
     async query(sql, params = []) {
         if (!this.isConnected) throw new Error('Database not connected');
         if (this.isPostgres) {
-            const text = this._transformSqlForPostgres(sql);
+            let text = this._transformSqlForPostgres(sql);
+            ({ text, params } = this._convertParamsForPostgres(text, params));
             const res = await this.pgPool.query(text, params);
             return res.rows;
         }
@@ -101,6 +112,7 @@ class Database {
             if (/^\s*insert\s+/i.test(text) && !/returning\s+id/i.test(text)) {
                 text = `${text} RETURNING id`;
             }
+            ({ text, params } = this._convertParamsForPostgres(text, params));
             const res = await this.pgPool.query(text, params);
             const first = res.rows && res.rows[0];
             return { id: first && first.id != null ? first.id : undefined, changes: res.rowCount };
@@ -115,7 +127,8 @@ class Database {
     async get(sql, params = []) {
         if (!this.isConnected) throw new Error('Database not connected');
         if (this.isPostgres) {
-            const text = this._transformSqlForPostgres(sql);
+            let text = this._transformSqlForPostgres(sql);
+            ({ text, params } = this._convertParamsForPostgres(text, params));
             const res = await this.pgPool.query(text, params);
             return res.rows[0] || null;
         }
@@ -154,10 +167,27 @@ class Database {
             try {
                 await client.query('BEGIN');
                 const tx = {
-                    run: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>({ id: r.rows?.[0]?.id, changes: r.rowCount })),
-                    get: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>r.rows[0]||null),
-                    all: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>r.rows),
-                    query: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>r.rows),
+                    run: (sql, params=[]) => {
+                        let text = this._transformSqlForPostgres(sql).replace(/;\s*$/, '');
+                        if (/^\s*insert\s+/i.test(text) && !/returning\s+id/i.test(text)) text = `${text} RETURNING id`;
+                        ({ text, params } = this._convertParamsForPostgres(text, params));
+                        return client.query(text, params).then(r=>({ id: r.rows?.[0]?.id, changes: r.rowCount }));
+                    },
+                    get: (sql, params=[]) => {
+                        let text = this._transformSqlForPostgres(sql);
+                        ({ text, params } = this._convertParamsForPostgres(text, params));
+                        return client.query(text, params).then(r=>r.rows[0]||null);
+                    },
+                    all: (sql, params=[]) => {
+                        let text = this._transformSqlForPostgres(sql);
+                        ({ text, params } = this._convertParamsForPostgres(text, params));
+                        return client.query(text, params).then(r=>r.rows);
+                    },
+                    query: (sql, params=[]) => {
+                        let text = this._transformSqlForPostgres(sql);
+                        ({ text, params } = this._convertParamsForPostgres(text, params));
+                        return client.query(text, params).then(r=>r.rows);
+                    },
                 };
                 await callback(tx);
                 await client.query('COMMIT');
