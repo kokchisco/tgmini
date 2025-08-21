@@ -9,7 +9,9 @@ class Database {
 
     async connect() {
         return new Promise((resolve, reject) => {
-            const dbPath = path.join(__dirname, '../../database/tgtask.db');
+            const dbPath = process.env.SQLITE_DB_PATH
+                ? process.env.SQLITE_DB_PATH
+                : path.join(__dirname, '../../database/tgtask.db');
             
             this.db = new sqlite3.Database(dbPath, (err) => {
                 if (err) {
@@ -17,7 +19,7 @@ class Database {
                     reject(err);
                 } else {
                     this.isConnected = true;
-                    console.log('Connected to SQLite database');
+                    console.log('Connected to SQLite database at', dbPath);
                     resolve();
                 }
             });

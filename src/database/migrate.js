@@ -2,14 +2,18 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-// Ensure database directory exists
-const dbDir = path.join(__dirname, '../../database');
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+// Resolve database file path (supports Railway Volume via SQLITE_DB_PATH)
+const resolvedDbPath = process.env.SQLITE_DB_PATH
+    ? process.env.SQLITE_DB_PATH
+    : path.join(__dirname, '../../database/tgtask.db');
+
+// Ensure directory exists
+const resolvedDir = path.dirname(resolvedDbPath);
+if (!fs.existsSync(resolvedDir)) {
+    fs.mkdirSync(resolvedDir, { recursive: true });
 }
 
-const dbPath = path.join(dbDir, 'tgtask.db');
-const db = new sqlite3.Database(dbPath);
+const db = new sqlite3.Database(resolvedDbPath);
 
 // Create tables
 const createTables = () => {
@@ -372,7 +376,7 @@ const seedData = () => {
 // Run migration
 const runMigration = async () => {
     try {
-        console.log('Creating database tables...');
+        console.log('Creating database tables at', resolvedDbPath, '...');
         await createTables();
         console.log('Tables created successfully!');
         
