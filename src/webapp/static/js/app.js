@@ -860,14 +860,14 @@ async function loadUserData() {
         const data = await apiCall(`/api/user/${userId}`);
         console.log('User data received:', data);
         userData = data;
-        renderHeader();
+        await renderHeader();
     } catch (error) {
         console.error('Error loading user data:', error);
         throw error;
     }
 }
 
-function renderHeader() {
+async function renderHeader() {
     const header = document.getElementById('header');
     const { first_name, last_name, username } = userData;
     const fullName = `${first_name || ''} ${last_name || ''}`.trim() || 'User';
