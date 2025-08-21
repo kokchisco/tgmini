@@ -167,6 +167,16 @@ const loadConfiguration = async () => {
         document.getElementById('friendsRequiredForBonus').value = data.claimsConfig.friendsRequiredForBonus;
         
         document.getElementById('supportUsername').value = data.supportConfig.supportUsername;
+        // Fill support admins
+        const sup = data.supportConfig.supportAdmins || [];
+        const get = (i, k) => (sup[i] && sup[i][k]) || '';
+        const ids = ['1','2','3','4','5'];
+        ids.forEach((id, idx) => {
+            const u = document.getElementById('supA' + id);
+            const d = document.getElementById('supA' + id + 'D');
+            if (u) u.value = get(idx, 'username');
+            if (d) d.value = get(idx, 'description');
+        });
         if (document.getElementById('appName')) document.getElementById('appName').value = (data.appConfig && data.appConfig.appName) || 'TGTask';
     } catch (error) {
         console.error('Error loading configuration:', error);
@@ -253,7 +263,8 @@ const loadTasks = async () => {
 // Load users
 const loadUsers = async () => {
     try {
-        const data = await apiCall('/api/admin/users');
+        const q = document.getElementById('userSearchInput')?.value || '';
+        const data = await apiCall(`/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`);
         
         let usersHtml = `
             <div class="table-container table-scroll">
@@ -631,10 +642,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
         
         try {
-            await apiCall('/api/admin/config/support', {
-                method: 'POST',
-                body: JSON.stringify(formData)
-            });
+            const admins = [1,2,3,4,5].map(n => ({
+                username: document.getElementById('supA'+n)?.value || '',
+                description: document.getElementById('supA'+n+'D')?.value || ''
+            }));
+            await apiCall('/api/admin/config/support', { method: 'POST', body: JSON.stringify({ ...formData, admins }) });
             
             tg.showAlert('✅ Support configuration saved successfully!');
         } catch (error) {
@@ -731,6 +743,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initial tab
     // Load initial dashboard
     loadDashboard();
+    // Bind search for users tab
+    const search = document.getElementById('userSearchInput');
+    if (search && !search._bound) {
+        let t;
+        search.addEventListener('input', () => {
+            clearTimeout(t);
+            t = setTimeout(() => loadUsers(), 250);
+        });
+        search._bound = true;
+    }
     // Bind referral audit form
     const refAuditForm = document.getElementById('refAuditForm');
     if (refAuditForm) {

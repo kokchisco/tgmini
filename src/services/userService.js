@@ -256,6 +256,7 @@ class UserService {
                     u.friends_invited
                  FROM users u
                  LEFT JOIN tasks t ON t.user_id = u.id
+                 WHERE COALESCE(u.is_banned, 0) = 0
                  GROUP BY u.id
                  ORDER BY total_earned DESC, u.friends_invited DESC
                  LIMIT ?`,

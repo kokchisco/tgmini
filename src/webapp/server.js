@@ -866,7 +866,34 @@ app.get('/api/admin/config', async (req, res) => {
                 friendsRequiredForBonus: await getIntConfig(req.db, 'friendsRequiredForBonus', parseInt(process.env.FRIENDS_REQUIRED_FOR_BONUS) || 10)
             },
             supportConfig: {
-                supportUsername: await getConfig(req.db, 'adminUsername', process.env.ADMIN_USERNAME || 'TGTaskSupport')
+                supportUsername: await getConfig(req.db, 'adminUsername', process.env.ADMIN_USERNAME || 'TGTaskSupport'),
+                supportAdmins: [
+                    {
+                        label: 'Admin 1',
+                        username: await getConfig(req.db, 'supportAdmin1', '') || '' ,
+                        description: await getConfig(req.db, 'supportAdmin1Desc', '') || ''
+                    },
+                    {
+                        label: 'Admin 2',
+                        username: await getConfig(req.db, 'supportAdmin2', '') || '',
+                        description: await getConfig(req.db, 'supportAdmin2Desc', '') || ''
+                    },
+                    {
+                        label: 'Admin 3',
+                        username: await getConfig(req.db, 'supportAdmin3', '') || '',
+                        description: await getConfig(req.db, 'supportAdmin3Desc', '') || ''
+                    },
+                    {
+                        label: 'Admin 4',
+                        username: await getConfig(req.db, 'supportAdmin4', '') || '',
+                        description: await getConfig(req.db, 'supportAdmin4Desc', '') || ''
+                    },
+                    {
+                        label: 'Admin 5',
+                        username: await getConfig(req.db, 'supportAdmin5', '') || '',
+                        description: await getConfig(req.db, 'supportAdmin5Desc', '') || ''
+                    }
+                ]
             },
             appConfig: {
                 appName: await getConfig(req.db, 'appName', process.env.APP_NAME || 'TGTask')
@@ -971,8 +998,16 @@ app.post('/api/admin/config/claims', async (req, res) => {
 
 app.post('/api/admin/config/support', async (req, res) => {
     try {
-        const { supportUsername } = req.body;
-        await setConfig(req.db, { adminUsername: supportUsername });
+        const { supportUsername, admins } = req.body;
+        const updates = { adminUsername: supportUsername };
+        if (Array.isArray(admins)) {
+            admins.slice(0,5).forEach((a, idx) => {
+                const n = idx + 1;
+                if (a && (a.username != null)) updates[`supportAdmin${n}`] = a.username;
+                if (a && (a.description != null)) updates[`supportAdmin${n}Desc`] = a.description;
+            });
+        }
+        await setConfig(req.db, updates);
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating support config:', error);
@@ -1005,12 +1040,26 @@ app.get('/api/admin/tasks', async (req, res) => {
 
 app.get('/api/admin/users', async (req, res) => {
     try {
-        const users = await req.db.all(`
-            SELECT telegram_id, first_name, username, points, friends_invited, created_at
-            FROM users 
-            ORDER BY points DESC 
-            LIMIT 100
-        `);
+        const q = (req.query && req.query.q) ? String(req.query.q).trim() : '';
+        let users;
+        if (q) {
+            const like = `%${q}%`;
+            // Search by username, first_name/last_name, or exact/partial telegram_id
+            users = await req.db.all(`
+                SELECT telegram_id, first_name, username, points, friends_invited, created_at
+                FROM users
+                WHERE (username LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR CAST(telegram_id AS TEXT) LIKE ?)
+                ORDER BY points DESC
+                LIMIT 200
+            `, [like, like, like, like]);
+        } else {
+            users = await req.db.all(`
+                SELECT telegram_id, first_name, username, points, friends_invited, created_at
+                FROM users 
+                ORDER BY points DESC 
+                LIMIT 100
+            `);
+        }
         
         res.json({ users });
     } catch (error) {
@@ -1686,21 +1735,35 @@ app.get('/api/user/:telegramId/team', async (req, res) => {
         const teamMembers = await req.db.all(`
             SELECT 
                 u.id,
+                u.telegram_id,
                 u.first_name,
                 u.last_name,
                 u.username,
                 u.points,
                 u.created_at,
-                COALESCE((SELECT SUM(points_earned) FROM claims_history ch WHERE ch.telegram_id = u.telegram_id AND ch.source = 'referral'), 0) AS referral_points,
+                COALESCE(fi.status, 'pending') AS invite_status,
+                COALESCE(fi.points_earned, 0) AS invite_points,
                 COUNT(uc.id) as tasks_completed
             FROM users u
             LEFT JOIN user_channel_joins uc ON u.id = uc.user_id
+            LEFT JOIN friend_invitations fi ON fi.invitee_telegram_id = u.telegram_id AND fi.inviter_id = ?
             WHERE u.referred_by = ?
-            GROUP BY u.id
+            GROUP BY u.id, fi.status, fi.points_earned
             ORDER BY u.created_at DESC
-        `, [user.id]);
+        `, [user.id, user.id]);
 
-        res.json({ teamMembers });
+        const normalized = (teamMembers || []).map(m => ({
+            id: m.id,
+            telegram_id: m.telegram_id,
+            first_name: m.first_name,
+            last_name: m.last_name,
+            username: m.username,
+            created_at: m.created_at,
+            tasks_completed: m.tasks_completed,
+            status: (m.invite_status === 'completed') ? 'success' : 'review'
+        }));
+
+        res.json({ teamMembers: normalized });
     } catch (error) {
         console.error('Error getting team data:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -1964,48 +2027,74 @@ app.post('/api/claim-reward', async (req, res) => {
             if (!chOk || !grOk) return res.status(403).json({ error: 'Join the community first' });
         }
 
-        // Check if user can claim today
-        const todayClaims = await req.db.get(`
-            SELECT COUNT(*) as count FROM claims_history 
-            WHERE telegram_id = ? AND source = 'daily' AND DATE(claimed_at) = DATE('now')
-        `, [telegramId]);
+        // Perform the entire claim in a transaction to prevent race conditions
+        let pointsEarned = 0;
+        await req.db.transaction(async (tx) => {
+            // Lock user row on Postgres; ignored on SQLite
+            try { await tx.get('SELECT id FROM users WHERE id = ? FOR UPDATE', [user.id]); } catch (_) {}
 
-        const dailyLimit = await getIntConfig(req.db, 'dailyClaimsLimit', parseInt(process.env.DAILY_CLAIMS_LIMIT) || 5);
-        const friendsPerBonus = await getIntConfig(req.db, 'friendsRequiredForBonus', parseInt(process.env.FRIENDS_REQUIRED_FOR_BONUS) || 10);
-        const bonusPerBlock = await getIntConfig(req.db, 'bonusClaimsPerFriends', parseInt(process.env.BONUS_CLAIMS_PER_FRIENDS) || 2);
-        const bonusClaims = Math.floor((user.friends_invited || 0) / friendsPerBonus) * bonusPerBlock;
-        const totalClaims = dailyLimit + bonusClaims;
+            // Recompute today's claims and allowed total inside the transaction
+            const todayClaims = await tx.get(`
+                SELECT COUNT(*) as count FROM claims_history 
+                WHERE telegram_id = ? AND source = 'daily' AND DATE(claimed_at) = DATE(CURRENT_TIMESTAMP)
+            `, [telegramId]);
 
-        if ((todayClaims.count || 0) >= totalClaims) {
-            return res.status(400).json({ error: 'Daily claim limit reached' });
-        }
+            const dailyLimit = await getIntConfig(req.db, 'dailyClaimsLimit', parseInt(process.env.DAILY_CLAIMS_LIMIT) || 5);
+            const friendsPerBonus = await getIntConfig(req.db, 'friendsRequiredForBonus', parseInt(process.env.FRIENDS_REQUIRED_FOR_BONUS) || 10);
+            const bonusPerBlock = await getIntConfig(req.db, 'bonusClaimsPerFriends', parseInt(process.env.BONUS_CLAIMS_PER_FRIENDS) || 2);
+            const bonusClaims = Math.floor((user.friends_invited || 0) / friendsPerBonus) * bonusPerBlock;
+            const totalClaims = dailyLimit + bonusClaims;
 
-        // Generate random points
-        const minClaim = await getIntConfig(req.db, 'minClaimAmount', parseInt(process.env.MIN_CLAIM_AMOUNT) || 50);
-        const maxClaim = await getIntConfig(req.db, 'maxClaimAmount', parseInt(process.env.MAX_CLAIM_AMOUNT) || 500);
-        const pointsEarned = Math.floor(Math.random() * (maxClaim - minClaim + 1)) + minClaim;
+            if ((todayClaims?.count || 0) >= totalClaims) {
+                throw new Error('Daily claim limit reached');
+            }
 
-        // Add points to user (balance and total earned)
-        await req.db.run(`
-            UPDATE users 
-            SET points = points + ?, 
-                total_points_earned = total_points_earned + ?,
-                updated_at = datetime('now')
-            WHERE id = ?
-        `, [pointsEarned, pointsEarned, user.id]);
+            // Generate biased random points based on account age
+            const minClaim = await getIntConfig(req.db, 'minClaimAmount', parseInt(process.env.MIN_CLAIM_AMOUNT) || 50);
+            const maxClaim = await getIntConfig(req.db, 'maxClaimAmount', parseInt(process.env.MAX_CLAIM_AMOUNT) || 500);
+            const range = Math.max(0, maxClaim - minClaim);
+            const createdAt = user.created_at ? new Date(user.created_at) : new Date();
+            const ageHours = Math.max(0, (Date.now() - createdAt.getTime()) / 3600000);
+            const randInt = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 
-        // Record claim
-        await req.db.run(`
-            INSERT INTO claims_history (telegram_id, points_earned, claimed_at, source)
-            VALUES (?, ?, datetime('now'), 'daily')
-        `, [telegramId, pointsEarned]);
+            if (ageHours < 24) {
+                // New users: higher probability for upper half of the range
+                const useUpper = Math.random() < 0.7; // 70% chance upper band
+                if (useUpper && range > 0) {
+                    const lower = minClaim + Math.floor(range * 0.6);
+                    pointsEarned = randInt(lower, maxClaim);
+                } else {
+                    pointsEarned = randInt(minClaim, maxClaim);
+                }
+            } else {
+                // Older users: cap rewards near minimum (up to 50% of the range above min)
+                const cap = minClaim + Math.floor(range * 0.5);
+                pointsEarned = randInt(minClaim, Math.max(minClaim, cap));
+            }
+
+            // Update user and record claim atomically
+            await tx.run(`
+                UPDATE users 
+                SET points = points + ?, 
+                    total_points_earned = total_points_earned + ?,
+                    updated_at = datetime('now')
+                WHERE id = ?
+            `, [pointsEarned, pointsEarned, user.id]);
+
+            await tx.run(`
+                INSERT INTO claims_history (telegram_id, points_earned, claimed_at, source)
+                VALUES (?, ?, datetime('now'), 'daily')
+            `, [telegramId, pointsEarned]);
+        });
 
         // If user has a pending referral and has at least engaged (claimed), finalize referral too
         try { await userService.finalizeReferralIfEligible(req.db, parseInt(telegramId)); } catch (_) {}
         res.json({ success: true, pointsEarned });
     } catch (error) {
         console.error('Error claiming reward:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        const msg = error && error.message ? error.message : 'Internal server error';
+        const code = msg.includes('limit') ? 400 : 500;
+        res.status(code).json({ error: msg });
     }
 });
 

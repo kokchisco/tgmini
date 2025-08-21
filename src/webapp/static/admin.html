@@ -523,6 +523,57 @@
                         <label class="form-label">Support Username</label>
                         <input type="text" class="form-input" id="supportUsername" placeholder="@support_username">
                     </div>
+                    <div class="form-group"><div class="form-label">Support Admins (Usernames & Descriptions)</div></div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Admin 1 Username</label>
+                            <input type="text" class="form-input" id="supA1" placeholder="@admin1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Admin 1 Description</label>
+                            <input type="text" class="form-input" id="supA1D" placeholder="e.g. Withdrawals">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Admin 2 Username</label>
+                            <input type="text" class="form-input" id="supA2" placeholder="@admin2">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Admin 2 Description</label>
+                            <input type="text" class="form-input" id="supA2D" placeholder="e.g. Tasks">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Admin 3 Username</label>
+                            <input type="text" class="form-input" id="supA3" placeholder="@admin3">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Admin 3 Description</label>
+                            <input type="text" class="form-input" id="supA3D" placeholder="e.g. Referrals">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Admin 4 Username</label>
+                            <input type="text" class="form-input" id="supA4" placeholder="@admin4">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Admin 4 Description</label>
+                            <input type="text" class="form-input" id="supA4D" placeholder="e.g. KYC">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Admin 5 Username</label>
+                            <input type="text" class="form-input" id="supA5" placeholder="@admin5">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Admin 5 Description</label>
+                            <input type="text" class="form-input" id="supA5D" placeholder="e.g. General Support">
+                        </div>
+                    </div>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> Save Support Config
                     </button>
@@ -677,6 +728,11 @@
                 <div class="config-title">
                     <i class="fas fa-users"></i>
                     User Management
+                </div>
+                <div class="form-row" style="margin-bottom:12px;">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <input type="text" class="form-input" id="userSearchInput" placeholder="Search by first name, username or Telegram ID...">
+                    </div>
                 </div>
                 <div id="usersList">
                     <div class="loading">Loading users...</div>

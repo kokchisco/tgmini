@@ -106,7 +106,8 @@ const router = {
         '/invite': 'invite',
         '/team': 'team',
         '/privacy': 'privacy',
-        '/community': 'community'
+        '/community': 'community',
+        '/support': 'support'
     },
 
     init() {
@@ -176,6 +177,9 @@ const router = {
                 break;
             case 'privacy':
                 this.loadPrivacyPage();
+                break;
+            case 'support':
+                this.loadSupportPage();
                 break;
             default:
                 this.loadHomePage();
@@ -439,12 +443,12 @@ const pageLoaders = {
                     </div>
                 </a>
                 
-                <a href="#" id="contactAdminLink" class="menu-item" onclick="contactAdmin()">
+                <a href="/support" class="menu-item">
                     <div class="menu-item-left">
                         <div class="menu-item-icon">
                             <span class="iconify" data-icon="mdi:headset"></span>
                         </div>
-                        <div class="menu-item-text">Contact Admin</div>
+                        <div class="menu-item-text">Support</div>
                     </div>
                     <div class="menu-item-arrow">
                         <span class="iconify" data-icon="mdi:chevron-right"></span>
@@ -604,25 +608,12 @@ const pageLoaders = {
 
             <div class="card" id="advertiseHelp">
                 <div style="margin-bottom:8px; font-weight:600;">Want us to upload your link?</div>
-                <div style="opacity:0.85; margin-bottom:12px;">Contact the admin below to submit your channel/group for promotion.</div>
-                <button id="contactAdminForAds" class="btn btn-primary" style="width:100%">
-                    <span class="iconify" data-icon="mdi:headset"></span> Contact Admin
-                </button>
+                <div style="opacity:0.85; margin-bottom:12px;">Open Support to submit your channel/group for promotion.</div>
+                <a href="/support" class="btn btn-primary" style="width:100%">
+                    <span class="iconify" data-icon="mdi:headset"></span> Open Support
+                </a>
             </div>
         `;
-        try {
-            const data = await fetch('/api/admin/contact').then(r=>r.json());
-            const adminUser = data && data.adminUsername ? String(data.adminUsername).replace(/^@/, '') : null;
-            if (adminUser) {
-                const btn = document.getElementById('contactAdminForAds');
-                if (btn) btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const url = `https://t.me/${adminUser}`;
-                    try { if (window.Telegram?.WebApp?.openTelegramLink) return window.Telegram.WebApp.openTelegramLink(url); } catch(_) {}
-                    window.open(url, '_blank');
-                });
-            }
-        } catch(_) {}
     },
 
     async loadCommunityPage() {
@@ -656,6 +647,37 @@ const pageLoaders = {
             });
         } catch (_) {
             document.getElementById('communityCard').innerHTML = '<div class="error">Failed to load</div>';
+        }
+    },
+
+    async loadSupportPage() {
+        const mainContent = document.getElementById('main-content');
+        mainContent.innerHTML = `
+            <div class="page-title">Support</div>
+            <div class="card" id="supportList">
+                <div class="loading"><i class="fas fa-spinner fa-spin"></i><p>Loading support contacts...</p></div>
+            </div>
+        `;
+        try {
+            const cfg = await fetch('/api/admin/config').then(r=>r.json());
+            const admins = (cfg && cfg.supportConfig && Array.isArray(cfg.supportConfig.supportAdmins)) ? cfg.supportConfig.supportAdmins : [];
+            const items = admins.filter(a => a && a.username).map(a => {
+                const uname = String(a.username).replace(/^@/, '');
+                const desc = a.description || '';
+                const url = `https://t.me/${uname}`;
+                return `
+                    <div class="history-item">
+                        <div class="history-header">
+                            <div class="history-title">@${uname}</div>
+                            <a href="${url}" target="_blank" class="btn btn-primary"><span class="iconify" data-icon="mdi:send"></span> Open Chat</a>
+                        </div>
+                        <div class="history-date">${desc}</div>
+                    </div>
+                `;
+            });
+            document.getElementById('supportList').innerHTML = items.length ? items.join('') : '<div class="empty-state"><span class="iconify" data-icon="mdi:headset"></span><h3>No support admins configured</h3><p>Please check back later.</p></div>';
+        } catch (e) {
+            document.getElementById('supportList').innerHTML = '<div class="error">Failed to load support contacts.</div>';
         }
     },
 
@@ -1437,14 +1459,15 @@ async function loadTeamData() {
         if (data.teamMembers && data.teamMembers.length > 0) {
             data.teamMembers.forEach(member => {
                 const name = `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'User';
+                const statusLabel = member.status === 'success' ? 'Success' : 'In Review';
+                const statusClass = member.status === 'success' ? 'status-completed' : 'status-pending';
                 html += `
                     <div class="history-item">
                         <div class="history-header">
                             <div class="history-title">${name}</div>
-                            <div class="history-amount">+${formatNumber(member.referral_points || 0)}</div>
+                            <div class="history-status ${statusClass}">${statusLabel}</div>
                         </div>
                         <div class="history-date">Joined ${new Date(member.created_at).toLocaleDateString()}</div>
-                        <div class="history-status status-completed">${member.tasks_completed || 0} tasks completed</div>
                     </div>
                 `;
             });
