@@ -201,6 +201,28 @@ app.get('/api/user/:telegramId', async (req, res) => {
     }
 });
 
+// Debug: show DB file path and table counts (protect behind admin)
+app.get('/api/_debug/db', async (req, res) => {
+    try {
+        if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
+        const info = {
+            sqlitePath: (req.db && req.db.dbPath) || null
+        };
+        // counts
+        const tables = ['users','channels','groups','user_channel_joins','user_group_joins','claims_history','withdrawals','bank_details','admin_config','broadcast_jobs','broadcast_results','social_tasks','user_social_claims'];
+        const counts = {};
+        for (const t of tables) {
+            try {
+                const row = await req.db.get(`SELECT COUNT(*) AS c FROM ${t}`);
+                counts[t] = row ? row.c : 0;
+            } catch (_) { counts[t] = null; }
+        }
+        res.json({ ok: true, ...info, counts });
+    } catch (e) {
+        res.status(500).json({ error: 'debug failed' });
+    }
+});
+
 // Sync Telegram profile from Web App (ensures username/first_name/last_name are populated)
 app.post('/api/user/sync', async (req, res) => {
     try {

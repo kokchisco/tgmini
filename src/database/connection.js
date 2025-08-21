@@ -1,17 +1,33 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 
 class Database {
     constructor() {
         this.db = null;
         this.isConnected = false;
+        this.dbPath = null;
     }
 
     async connect() {
         return new Promise((resolve, reject) => {
-            const dbPath = process.env.SQLITE_DB_PATH
+            let dbPath = process.env.SQLITE_DB_PATH
                 ? process.env.SQLITE_DB_PATH
                 : path.join(__dirname, '../../database/tgtask.db');
+
+            // In production, require SQLITE_DB_PATH to avoid accidental ephemeral DBs
+            if ((process.env.NODE_ENV || 'production') === 'production' && !process.env.SQLITE_DB_PATH) {
+                const msg = 'SQLITE_DB_PATH must be set in production. Refusing to start with ephemeral DB.';
+                console.error(msg);
+                return reject(new Error(msg));
+            }
+
+            try {
+                const dir = path.dirname(dbPath);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+            } catch (_) {}
             
             this.db = new sqlite3.Database(dbPath, (err) => {
                 if (err) {
@@ -19,6 +35,7 @@ class Database {
                     reject(err);
                 } else {
                     this.isConnected = true;
+                    this.dbPath = dbPath;
                     console.log('Connected to SQLite database at', dbPath);
                     resolve();
                 }
