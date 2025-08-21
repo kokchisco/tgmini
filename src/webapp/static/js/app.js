@@ -1430,7 +1430,7 @@ async function loadTeamData() {
                     <div class="history-item">
                         <div class="history-header">
                             <div class="history-title">${name}</div>
-                            <div class="history-amount">+₦500</div>
+                            <div class="history-amount">+${formatNumber(member.referral_points || 0)}</div>
                         </div>
                         <div class="history-date">Joined ${new Date(member.created_at).toLocaleDateString()}</div>
                         <div class="history-status status-completed">${member.tasks_completed || 0} tasks completed</div>

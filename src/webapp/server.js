@@ -1531,10 +1531,12 @@ app.get('/api/user/:telegramId/referral', async (req, res) => {
             ORDER BY u.created_at DESC
         `, [user.id]);
 
+        const friendInvitePoints = await getIntConfig(req.db, 'friendInvitePoints', parseInt(process.env.POINTS_PER_FRIEND_INVITE) || 25);
+
         res.json({
             referralLink: `https://t.me/${process.env.BOT_USERNAME || 'your_bot_username'}?start=ref${telegramId}`,
             totalReferred: user.friends_invited,
-            referralEarnings: user.friends_invited * 500,
+            referralEarnings: (user.friends_invited || 0) * friendInvitePoints,
             referredUsers
         });
     } catch (error) {
@@ -1572,6 +1574,7 @@ app.get('/api/user/:telegramId/team', async (req, res) => {
                 u.username,
                 u.points,
                 u.created_at,
+                COALESCE((SELECT SUM(points_earned) FROM claims_history ch WHERE ch.telegram_id = u.telegram_id AND ch.source = 'referral'), 0) AS referral_points,
                 COUNT(uc.id) as tasks_completed
             FROM users u
             LEFT JOIN user_channel_joins uc ON u.id = uc.user_id

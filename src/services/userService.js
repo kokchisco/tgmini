@@ -175,6 +175,17 @@ class UserService {
                  WHERE id = ?`,
                 [userId]
             );
+            // Credit referrer points and log earnings
+            const friendInvitePointsRow = await database.get("SELECT config_value AS v FROM admin_config WHERE config_key = 'friendInvitePoints'");
+            const credit = parseInt(friendInvitePointsRow && friendInvitePointsRow.v ? friendInvitePointsRow.v : (process.env.POINTS_PER_FRIEND_INVITE || 25));
+            if (Number.isFinite(credit) && credit > 0) {
+                await database.run(`UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ? WHERE id = ?`, [credit, credit, userId]);
+                // Also log in claims_history as referral
+                const ref = await database.get('SELECT telegram_id FROM users WHERE id = ?', [userId]);
+                if (ref && ref.telegram_id) {
+                    await database.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at, source) VALUES (?, ?, CURRENT_TIMESTAMP, 'referral')`, [ref.telegram_id, credit]);
+                }
+            }
         } catch (error) {
             console.error('Error in incrementFriendsInvited:', error);
             throw error;
