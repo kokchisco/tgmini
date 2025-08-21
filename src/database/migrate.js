@@ -1,8 +1,11 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+let PgPool = null;
+try { PgPool = require('pg').Pool; } catch (_) {}
 
 // Resolve database file path (supports Railway Volume via SQLITE_DB_PATH)
+const isPostgres = !!process.env.DATABASE_URL;
 const resolvedDbPath = process.env.SQLITE_DB_PATH
     ? process.env.SQLITE_DB_PATH
     : path.join(__dirname, '../../database/tgtask.db');
@@ -13,7 +16,7 @@ if (!fs.existsSync(resolvedDir)) {
     fs.mkdirSync(resolvedDir, { recursive: true });
 }
 
-const db = new sqlite3.Database(resolvedDbPath);
+const db = isPostgres ? null : new sqlite3.Database(resolvedDbPath);
 
 const shouldSeedSamples = (() => {
     const envFlag = String(process.env.SEED_SAMPLES || '').trim().toLowerCase();
@@ -24,7 +27,7 @@ const shouldSeedSamples = (() => {
 })();
 
 // Create tables
-const createTables = () => {
+const createTablesSqlite = () => {
     return new Promise((resolve, reject) => {
         db.serialize(() => {
             // Users table
@@ -309,20 +312,220 @@ const createTables = () => {
     });
 };
 
+async function createTablesPostgres() {
+    if (!PgPool) throw new Error('pg module not available');
+    const pool = new PgPool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : undefined });
+    const q = async (sql) => pool.query(sql);
+    // Create tables (id SERIAL PK, timestamps default now())
+    await q(`CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        telegram_id BIGINT UNIQUE NOT NULL,
+        username TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        points INTEGER DEFAULT 0,
+        total_points_earned INTEGER DEFAULT 0,
+        tasks_completed INTEGER DEFAULT 0,
+        friends_invited INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        referred_by INTEGER,
+        is_banned INTEGER DEFAULT 0
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS tasks (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        task_type TEXT NOT NULL,
+        task_data TEXT,
+        points_earned INTEGER DEFAULT 0,
+        completed_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS channels (
+        id SERIAL PRIMARY KEY,
+        channel_id TEXT UNIQUE NOT NULL,
+        channel_name TEXT NOT NULL,
+        channel_username TEXT,
+        channel_type TEXT DEFAULT 'channel',
+        points_reward INTEGER DEFAULT 10,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT NOW(),
+        channel_link TEXT,
+        description TEXT
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS groups (
+        id SERIAL PRIMARY KEY,
+        group_id TEXT UNIQUE NOT NULL,
+        group_name TEXT NOT NULL,
+        group_username TEXT,
+        points_reward INTEGER DEFAULT 15,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT NOW(),
+        group_link TEXT,
+        description TEXT
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS social_tasks (
+        id SERIAL PRIMARY KEY,
+        platform TEXT NOT NULL,
+        task_name TEXT NOT NULL,
+        task_link TEXT NOT NULL,
+        points_reward INTEGER DEFAULT 10,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT NOW(),
+        description TEXT
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS user_social_claims (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        social_task_id INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        points_earned INTEGER DEFAULT 0,
+        requested_at TIMESTAMP DEFAULT NOW(),
+        available_at TIMESTAMP NOT NULL,
+        completed_at TIMESTAMP,
+        UNIQUE(user_id, social_task_id)
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS user_channel_joins (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        channel_id INTEGER NOT NULL,
+        joined_at TIMESTAMP DEFAULT NOW(),
+        points_earned INTEGER DEFAULT 0,
+        UNIQUE(user_id, channel_id)
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS user_group_joins (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        group_id INTEGER NOT NULL,
+        joined_at TIMESTAMP DEFAULT NOW(),
+        points_earned INTEGER DEFAULT 0,
+        UNIQUE(user_id, group_id)
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS friend_invitations (
+        id SERIAL PRIMARY KEY,
+        inviter_id INTEGER NOT NULL,
+        invitee_telegram_id BIGINT,
+        invitee_username TEXT,
+        status TEXT DEFAULT 'pending',
+        points_earned INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS daily_limits (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        date DATE NOT NULL,
+        tasks_completed INTEGER DEFAULT 0,
+        points_earned INTEGER DEFAULT 0,
+        UNIQUE(user_id, date)
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS withdrawals (
+        id SERIAL PRIMARY KEY,
+        telegram_id BIGINT NOT NULL,
+        amount INTEGER NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        processed_at TIMESTAMP
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS bank_details (
+        id SERIAL PRIMARY KEY,
+        telegram_id BIGINT UNIQUE NOT NULL,
+        account_name TEXT NOT NULL,
+        account_number TEXT NOT NULL,
+        bank_name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS claims_history (
+        id SERIAL PRIMARY KEY,
+        telegram_id BIGINT NOT NULL,
+        points_earned INTEGER NOT NULL,
+        claimed_at TIMESTAMP DEFAULT NOW(),
+        source TEXT
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS admin_config (
+        id SERIAL PRIMARY KEY,
+        config_key TEXT UNIQUE NOT NULL,
+        config_value TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS admin_audit (
+        id SERIAL PRIMARY KEY,
+        admin_telegram_id BIGINT,
+        target_telegram_id BIGINT,
+        action TEXT NOT NULL,
+        amount INTEGER,
+        reason TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS broadcast_jobs (
+        id SERIAL PRIMARY KEY,
+        created_by BIGINT,
+        scope TEXT NOT NULL,
+        target TEXT,
+        media_type TEXT,
+        media_url TEXT,
+        message TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        status TEXT DEFAULT 'queued'
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS broadcast_results (
+        id SERIAL PRIMARY KEY,
+        job_id INTEGER NOT NULL,
+        target_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        sent_at TIMESTAMP DEFAULT NOW()
+    )`);
+    console.log('Postgres tables ensured.');
+    await pool.end();
+}
+
 // Seed initial data (only when enabled and tables are empty)
 const seedData = async () => {
     // Check if tables already have data
-    const hasAny = await new Promise((resolve) => {
-        db.serialize(() => {
-            let channelsCount = 0, groupsCount = 0;
-            db.get('SELECT COUNT(*) AS c FROM channels', (e, r) => { channelsCount = (r && r.c) || 0; doneOne(); });
-            db.get('SELECT COUNT(*) AS c FROM groups', (e, r) => { groupsCount = (r && r.c) || 0; doneOne(); });
-            let pending = 2;
-            function doneOne(){ if(--pending===0) resolve((channelsCount>0) || (groupsCount>0)); }
+    let hasAny = false;
+    if (isPostgres) {
+        const pool = new PgPool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : undefined });
+        const ch = await pool.query('SELECT COUNT(*)::int AS c FROM channels');
+        const gr = await pool.query('SELECT COUNT(*)::int AS c FROM groups');
+        hasAny = (ch.rows[0].c > 0) || (gr.rows[0].c > 0);
+        await pool.end();
+    } else {
+        hasAny = await new Promise((resolve) => {
+            db.serialize(() => {
+                let channelsCount = 0, groupsCount = 0;
+                db.get('SELECT COUNT(*) AS c FROM channels', (e, r) => { channelsCount = (r && r.c) || 0; doneOne(); });
+                db.get('SELECT COUNT(*) AS c FROM groups', (e, r) => { groupsCount = (r && r.c) || 0; doneOne(); });
+                let pending = 2;
+                function doneOne(){ if(--pending===0) resolve((channelsCount>0) || (groupsCount>0)); }
+            });
         });
-    });
+    }
     if (hasAny) return; // do not seed if data exists
     if (!shouldSeedSamples) return; // only seed when enabled
+    if (isPostgres) {
+        const pool = new PgPool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : undefined });
+        const run = (text, params) => pool.query(text, params);
+        const sampleChannels = [
+            { channel_id: '@sample_channel_1', channel_name: 'Sample Channel 1', channel_link: 'https://t.me/sample_channel_1', points_reward: 10 },
+            { channel_id: '@sample_channel_2', channel_name: 'Sample Channel 2', channel_link: 'https://t.me/sample_channel_2', points_reward: 15 },
+            { channel_id: '@sample_channel_3', channel_name: 'Sample Channel 3', channel_link: 'https://t.me/sample_channel_3', points_reward: 20 }
+        ];
+        for (const c of sampleChannels) {
+            await run(`INSERT INTO channels (channel_id, channel_name, channel_link, points_reward) VALUES ($1,$2,$3,$4) ON CONFLICT (channel_id) DO NOTHING`, [c.channel_id, c.channel_name, c.channel_link, c.points_reward]);
+        }
+        const sampleGroups = [
+            { group_id: '@sample_group_1', group_name: 'Sample Group 1', group_link: 'https://t.me/sample_group_1', points_reward: 15 },
+            { group_id: '@sample_group_2', group_name: 'Sample Group 2', group_link: 'https://t.me/sample_group_2', points_reward: 20 },
+            { group_id: '@sample_group_3', group_name: 'Sample Group 3', group_link: 'https://t.me/sample_group_3', points_reward: 25 }
+        ];
+        for (const g of sampleGroups) {
+            await run(`INSERT INTO groups (group_id, group_name, group_link, points_reward) VALUES ($1,$2,$3,$4) ON CONFLICT (group_id) DO NOTHING`, [g.group_id, g.group_name, g.group_link, g.points_reward]);
+        }
+        await pool.end();
+        return;
+    }
     return new Promise((resolve, reject) => {
         // Insert sample channels
         const sampleChannels = [
@@ -396,9 +599,15 @@ const seedData = async () => {
 // Run migration
 const runMigration = async () => {
     try {
-        console.log('Creating database tables at', resolvedDbPath, '...');
-        await createTables();
-        console.log('Tables created successfully!');
+        if (isPostgres) {
+            console.log('Creating Postgres database tables...');
+            await createTablesPostgres();
+            console.log('Tables created successfully (Postgres)!');
+        } else {
+            console.log('Creating database tables at', resolvedDbPath, '...');
+            await createTablesSqlite();
+            console.log('Tables created successfully!');
+        }
         
         // Seed only when enabled and tables empty
         if (shouldSeedSamples) {
@@ -410,10 +619,10 @@ const runMigration = async () => {
         }
         
         console.log('Database migration completed!');
-        db.close();
+        if (db) db.close();
     } catch (error) {
         console.error('Migration failed:', error);
-        db.close();
+        if (db) db.close();
         process.exit(1);
     }
 };

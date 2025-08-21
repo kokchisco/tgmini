@@ -1,16 +1,41 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+let PgPool = null;
+try { PgPool = require('pg').Pool; } catch (_) {}
 
 class Database {
     constructor() {
         this.db = null;
         this.isConnected = false;
         this.dbPath = null;
+        this.isPostgres = !!process.env.DATABASE_URL;
+        this.pgPool = null;
     }
 
     async connect() {
         return new Promise((resolve, reject) => {
+            if (this.isPostgres) {
+                if (!PgPool) {
+                    const msg = 'pg module not available but DATABASE_URL is set.';
+                    console.error(msg);
+                    return reject(new Error(msg));
+                }
+                try {
+                    this.pgPool = new PgPool({
+                        connectionString: process.env.DATABASE_URL,
+                        ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : undefined
+                    });
+                } catch (e) {
+                    console.error('Failed to init Postgres pool:', e);
+                    return reject(e);
+                }
+                this.isConnected = true;
+                this.dbPath = process.env.DATABASE_URL;
+                console.log('Connected to Postgres via DATABASE_URL');
+                return resolve();
+            }
+
             let dbPath = process.env.SQLITE_DB_PATH
                 ? process.env.SQLITE_DB_PATH
                 : path.join(__dirname, '../../database/tgtask.db');
@@ -46,75 +71,61 @@ class Database {
         });
     }
 
-    async query(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            if (!this.isConnected) {
-                reject(new Error('Database not connected'));
-                return;
-            }
+    _transformSqlForPostgres(sql) {
+        let s = String(sql);
+        // Replace SQLite datetime('now') with Postgres function
+        s = s.replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
+        // Boolean: leave to Postgres defaults
+        return s;
+    }
 
+    async query(sql, params = []) {
+        if (!this.isConnected) throw new Error('Database not connected');
+        if (this.isPostgres) {
+            const text = this._transformSqlForPostgres(sql);
+            const res = await this.pgPool.query(text, params);
+            return res.rows;
+        }
+        return new Promise((resolve, reject) => {
             this.db.all(sql, params, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows);
-                }
+                if (err) reject(err); else resolve(rows);
             });
         });
     }
 
     async run(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            if (!this.isConnected) {
-                reject(new Error('Database not connected'));
-                return;
+        if (!this.isConnected) throw new Error('Database not connected');
+        if (this.isPostgres) {
+            let text = this._transformSqlForPostgres(sql).replace(/;\s*$/, '');
+            // Try to append RETURNING id for INSERTs if not present
+            if (/^\s*insert\s+/i.test(text) && !/returning\s+id/i.test(text)) {
+                text = `${text} RETURNING id`;
             }
-
+            const res = await this.pgPool.query(text, params);
+            const first = res.rows && res.rows[0];
+            return { id: first && first.id != null ? first.id : undefined, changes: res.rowCount };
+        }
+        return new Promise((resolve, reject) => {
             this.db.run(sql, params, function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve({
-                        id: this.lastID,
-                        changes: this.changes
-                    });
-                }
+                if (err) reject(err); else resolve({ id: this.lastID, changes: this.changes });
             });
         });
     }
 
     async get(sql, params = []) {
+        if (!this.isConnected) throw new Error('Database not connected');
+        if (this.isPostgres) {
+            const text = this._transformSqlForPostgres(sql);
+            const res = await this.pgPool.query(text, params);
+            return res.rows[0] || null;
+        }
         return new Promise((resolve, reject) => {
-            if (!this.isConnected) {
-                reject(new Error('Database not connected'));
-                return;
-            }
-
-            this.db.get(sql, params, (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row);
-                }
-            });
+            this.db.get(sql, params, (err, row) => { if (err) reject(err); else resolve(row); });
         });
     }
 
     async all(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            if (!this.isConnected) {
-                reject(new Error('Database not connected'));
-                return;
-            }
-
-            this.db.all(sql, params, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows);
-                }
-            });
-        });
+        return this.query(sql, params);
     }
 
     async close() {
@@ -137,12 +148,28 @@ class Database {
 
     // Transaction support
     async transaction(callback) {
-        return new Promise((resolve, reject) => {
-            if (!this.isConnected) {
-                reject(new Error('Database not connected'));
-                return;
+        if (!this.isConnected) throw new Error('Database not connected');
+        if (this.isPostgres) {
+            const client = await this.pgPool.connect();
+            try {
+                await client.query('BEGIN');
+                const tx = {
+                    run: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>({ id: r.rows?.[0]?.id, changes: r.rowCount })),
+                    get: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>r.rows[0]||null),
+                    all: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>r.rows),
+                    query: (sql, params=[]) => client.query(this._transformSqlForPostgres(sql), params).then(r=>r.rows),
+                };
+                await callback(tx);
+                await client.query('COMMIT');
+            } catch (e) {
+                try { await client.query('ROLLBACK'); } catch(_) {}
+                throw e;
+            } finally {
+                client.release();
             }
-
+            return;
+        }
+        return new Promise((resolve, reject) => {
             this.db.serialize(() => {
                 this.db.run('BEGIN TRANSACTION');
                 
