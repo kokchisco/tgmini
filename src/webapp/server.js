@@ -201,6 +201,38 @@ app.get('/api/user/:telegramId', async (req, res) => {
     }
 });
 
+// Sync Telegram profile from Web App (ensures username/first_name/last_name are populated)
+app.post('/api/user/sync', async (req, res) => {
+    try {
+        const b = req.body || {};
+        const telegramId = parseInt(b.telegramId);
+        if (!Number.isFinite(telegramId)) return res.status(400).json({ error: 'Invalid telegramId' });
+        const username = b.username || null;
+        const firstName = b.first_name || null;
+        const lastName = b.last_name || null;
+
+        let user = await userService.getUserByTelegramId(req.db, telegramId);
+        if (!user) {
+            await userService.getOrCreateUser(req.db, {
+                telegram_id: telegramId,
+                username,
+                first_name: firstName,
+                last_name: lastName
+            });
+        } else {
+            await req.db.run(
+                `UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = datetime('now') WHERE telegram_id = ?`,
+                [username, firstName, lastName, telegramId]
+            );
+        }
+        user = await userService.getUserByTelegramId(req.db, telegramId);
+        return res.json({ success: true, user });
+    } catch (e) {
+        console.error('Error syncing user profile:', e);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Admin: adjust user balance
 app.post('/api/admin/users/adjust-balance', async (req, res) => {
     try {

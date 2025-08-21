@@ -1718,6 +1718,23 @@ window.toggleFaq = toggleFaq;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
+    // Try to sync Telegram profile so backend has username/first/last
+    (async () => {
+        try {
+            if (telegramUser && userId) {
+                await fetch('/api/user/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telegramId: userId,
+                        username: telegramUser.username || null,
+                        first_name: telegramUser.first_name || null,
+                        last_name: telegramUser.last_name || null
+                    })
+                }).catch(() => {});
+            }
+        } catch (_) {}
+    })();
     // Initialize router
     router.init();
     
