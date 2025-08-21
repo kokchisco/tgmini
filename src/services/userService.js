@@ -28,6 +28,20 @@ class UserService {
 
             if (referrerIdRow) {
                 await this.incrementFriendsInvited(database, referrerIdRow.id);
+                // Notify referrer best-effort
+                try {
+                    const botToken = process.env.BOT_TOKEN;
+                    const ref = await database.get('SELECT telegram_id FROM users WHERE id = ?', [referrerIdRow.id]);
+                    const pointsRow = await database.get("SELECT config_value AS v FROM admin_config WHERE config_key = 'friendInvitePoints'");
+                    const credit = parseInt(pointsRow && pointsRow.v ? pointsRow.v : (process.env.POINTS_PER_FRIEND_INVITE || 25));
+                    if (botToken && ref && ref.telegram_id && Number.isFinite(credit) && credit > 0) {
+                        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chat_id: ref.telegram_id, text: `🎉 New invite joined! You earned ${credit} points.` })
+                        });
+                    }
+                } catch (_) {}
             }
 
             return await database.get('SELECT * FROM users WHERE id = ?', [result.id]);

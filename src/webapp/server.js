@@ -1904,7 +1904,7 @@ app.get('/api/history/:telegramId', async (req, res) => {
                 WHERE user_id = ?
                 UNION ALL
                 SELECT 
-                    'Daily Reward' as task_name,
+                    CASE WHEN source = 'referral' THEN 'Invite Reward' ELSE 'Daily Reward' END as task_name,
                     points_earned,
                     claimed_at as earned_at
                 FROM claims_history 
