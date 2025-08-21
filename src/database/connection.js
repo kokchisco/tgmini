@@ -75,6 +75,13 @@ class Database {
         let s = String(sql);
         // Replace SQLite datetime('now') with Postgres function
         s = s.replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
+        // Handle datetime('now', '+N minutes/hours/days') and negatives
+        s = s.replace(/datetime\('now'\s*,\s*'\+(\d+)\s+minutes?'\)/gi, "CURRENT_TIMESTAMP + interval '$1 minutes'");
+        s = s.replace(/datetime\('now'\s*,\s*'\-(\d+)\s+minutes?'\)/gi, "CURRENT_TIMESTAMP - interval '$1 minutes'");
+        s = s.replace(/datetime\('now'\s*,\s*'\+(\d+)\s+hours?'\)/gi, "CURRENT_TIMESTAMP + interval '$1 hours'");
+        s = s.replace(/datetime\('now'\s*,\s*'\-(\d+)\s+hours?'\)/gi, "CURRENT_TIMESTAMP - interval '$1 hours'");
+        s = s.replace(/datetime\('now'\s*,\s*'\+(\d+)\s+days?'\)/gi, "CURRENT_TIMESTAMP + interval '$1 days'");
+        s = s.replace(/datetime\('now'\s*,\s*'\-(\d+)\s+days?'\)/gi, "CURRENT_TIMESTAMP - interval '$1 days'");
         // Boolean: leave to Postgres defaults
         return s;
     }

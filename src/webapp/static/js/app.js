@@ -481,9 +481,12 @@ const pageLoaders = {
         const mainContent = document.getElementById('main-content');
         // Ensure fresh user data for accurate balance
         try { await loadUserData(); } catch (e) {}
-        const cfg = await fetch('/api/admin/config').then(r=>r.json()).catch(()=>({ withdrawalConfig: { currencySymbol: '₦', pointToCurrencyRate: 1 } }));
+        const cfg = await fetch('/api/admin/config').then(r=>r.json()).catch(()=>({ withdrawalConfig: { currencySymbol: '₦', pointToCurrencyRate: 1, minWithdrawal: 1000 } }));
         const curr = (cfg && cfg.withdrawalConfig && cfg.withdrawalConfig.currencySymbol) || '₦';
         const rate = (cfg && cfg.withdrawalConfig && parseFloat(cfg.withdrawalConfig.pointToCurrencyRate)) || 1;
+        const minWithdrawalPoints = (cfg && cfg.withdrawalConfig && parseInt(cfg.withdrawalConfig.minWithdrawal)) || 1000;
+        // Make available to form validator
+        window.__minWithdrawalPoints = minWithdrawalPoints;
         mainContent.innerHTML = `
             <div class="page-title">Withdraw</div>
             
@@ -511,7 +514,7 @@ const pageLoaders = {
                      </button>
                 </form>
                 <div style="margin-top: 16px; text-align: center; font-size: 14px; color: #6c757d;">
-                    Minimum withdrawal: 1,000 points<br>
+                    Minimum withdrawal: ${formatNumber(minWithdrawalPoints)} points<br>
                     Processing time: 24-48 hours
                 </div>
             </div>
@@ -1453,7 +1456,7 @@ function setupWithdrawForm() {
         e.preventDefault();
         
         const amount = parseInt(document.getElementById('withdrawAmount').value);
-        const minWithdrawal = 1000;
+        const minWithdrawal = window.__minWithdrawalPoints || 1000;
         
         if (amount < minWithdrawal) {
             if (tg && tg.showAlert) tg.showAlert(`❌ Minimum withdrawal is ${minWithdrawal} points`);
