@@ -276,11 +276,11 @@ const pageLoaders = {
             <div class="page-title">Tasks</div>
             
             <div class="tabs">
-                <div class="tab active" data-task-tab="telegram">Telegram</div>
-                <div class="tab" data-task-tab="whatsapp">WhatsApp</div>
-                <div class="tab" data-task-tab="facebook">Facebook</div>
-                <div class="tab" data-task-tab="tiktok">TikTok</div>
-                <div class="tab" data-task-tab="website">Website</div>
+                <div class="tab active" data-task-tab="telegram">TG</div>
+                <div class="tab" data-task-tab="whatsapp">WA</div>
+                <div class="tab" data-task-tab="facebook">FB</div>
+                <div class="tab" data-task-tab="tiktok">TT</div>
+                <div class="tab" data-task-tab="website">Web</div>
             </div>
 
             <div id="tasksContent">
@@ -445,7 +445,7 @@ const pageLoaders = {
                     </div>
                 </a>
                 
-                <a href="/support" class="menu-item">
+                <a href="#" class="menu-item" onclick="router.navigate('/support'); return false;">
                     <div class="menu-item-left">
                         <div class="menu-item-icon">
                             <span class="iconify" data-icon="mdi:headset"></span>
@@ -602,20 +602,23 @@ const pageLoaders = {
         mainContent.innerHTML = `
             <div class="page-title">Advertise</div>
             
-            <div class="empty-state">
-                <span class="iconify" data-icon="mdi:bullhorn-outline"></span>
+            <div class="card" style="text-align:center; padding:24px 16px;">
                 <h3>Coming Soon!</h3>
                 <p>Advertise your channels and groups to get more members!</p>
             </div>
-
-            <div class="card" id="advertiseHelp">
+            
+            <div class="card" style="padding:16px;">
                 <div style="margin-bottom:8px; font-weight:600;">Want us to upload your link?</div>
                 <div style="opacity:0.85; margin-bottom:12px;">Open Support to submit your channel/group for promotion.</div>
-                <a href="/support" class="btn btn-primary" style="width:100%">
+                <a href="#" id="advertiseSupportLink" class="btn btn-primary" style="width:100%">
                     <span class="iconify" data-icon="mdi:headset"></span> Open Support
                 </a>
             </div>
         `;
+        try {
+            const advBtn = document.getElementById('advertiseSupportLink');
+            if (advBtn) advBtn.addEventListener('click', (e)=>{ e.preventDefault(); router.navigate('/support'); });
+        } catch(_) {}
     },
 
     async loadCommunityPage() {
@@ -686,12 +689,12 @@ const pageLoaders = {
          async loadAboutPage() {
          const mainContent = document.getElementById('main-content');
          mainContent.innerHTML = `
-             <div class="page-title">About TGTask</div>
+             <div class="page-title">About <span id="aboutAppName">TGTask</span></div>
              
              <div class="balance-card">
-                 <div class="balance-title">About TGTask</div>
+                 <div class="balance-title">About <span id="aboutCardAppName">TGTask</span></div>
                  <div class="balance-subtitle">
-                     TGTask is a platform that rewards users for completing tasks across Telegram and other socials.
+                     <span id="aboutDescAppName">TGTask</span> is a platform that rewards users for completing tasks across Telegram and other socials.
                  </div>
              </div>
  
@@ -868,7 +871,7 @@ const pageLoaders = {
             
             <div class="balance-card">
                 <div class="balance-title">My Team</div>
-                <div class="balance-subtitle">People you've referred to TGTask</div>
+                <div class="balance-subtitle">People you've referred to <span id="teamAppName">TGTask</span></div>
             </div>
 
             <div class="card">
@@ -934,7 +937,7 @@ async function renderHeader() {
                     <p>${username ? `@${username}` : ''}</p>
                 </div>
             </div>
-            <div class="logo" id="appLogo">TGTask</div>
+            <div class="logo" id="appLogo">${(function(){ try { return (localStorage.getItem('appName')||'').trim(); } catch(_) { return ''; } })()}</div>
         </div>
     `;
     // Replace logo with configured app name
@@ -944,6 +947,12 @@ async function renderHeader() {
         const el = document.getElementById('appLogo');
         if (el) el.textContent = appName;
         window.__appCfgName = appName;
+        try { localStorage.setItem('appName', appName); } catch(_) {}
+        // Update other app name placeholders if present
+        const about1 = document.getElementById('aboutAppName'); if (about1) about1.textContent = appName;
+        const about2 = document.getElementById('aboutCardAppName'); if (about2) about2.textContent = appName;
+        const about3 = document.getElementById('aboutDescAppName'); if (about3) about3.textContent = appName;
+        const teamName = document.getElementById('teamAppName'); if (teamName) teamName.textContent = appName;
     } catch(_) {}
 }
 
@@ -1751,7 +1760,7 @@ async function contactAdmin() {
             else alert('❌ Admin username not configured');
             return;
         }
-        const message = `Hi! I need help with my TGTask account. My Telegram ID: ${userId}`;
+        const message = `Hi! I need help with my ${window.__appCfgName || 'App'} account. My Telegram ID: ${userId}`;
         const url = `https://t.me/${adminUsername}?text=${encodeURIComponent(message)}`;
         console.log('Opening admin link:', url);
         if (tg && tg.showAlert) await tg.showAlert(`Opening chat with @${adminUsername}...`);

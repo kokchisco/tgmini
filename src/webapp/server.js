@@ -2291,6 +2291,7 @@ app.get('/api/history/:telegramId', async (req, res) => {
         if (type === 'withdrawals') {
             const withdrawals = await req.db.all(`
                 SELECT id, telegram_id, amount, status, created_at, processed_at, fee_points, receivable_points, receivable_currency_amount 
+                FROM withdrawals
                 WHERE telegram_id = ? 
                 ORDER BY created_at DESC 
                 LIMIT 20
