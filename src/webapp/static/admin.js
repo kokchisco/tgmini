@@ -159,6 +159,8 @@ const loadConfiguration = async () => {
         if (document.getElementById('pointToCurrencyRate')) document.getElementById('pointToCurrencyRate').value = data.withdrawalConfig.pointToCurrencyRate || 1;
         const wdEnabled = document.getElementById('withdrawalsEnabled');
         if (wdEnabled) wdEnabled.checked = !!data.withdrawalConfig.withdrawalsEnabled;
+        const minRefs = document.getElementById('minReferralsForWithdraw');
+        if (minRefs) minRefs.value = (data.withdrawalConfig && typeof data.withdrawalConfig.minReferralsForWithdraw !== 'undefined') ? data.withdrawalConfig.minReferralsForWithdraw : 10;
         
         document.getElementById('dailyClaimsLimit').value = data.claimsConfig.dailyClaimsLimit;
         document.getElementById('minClaimAmount').value = data.claimsConfig.minClaimAmount;
@@ -178,12 +180,9 @@ const loadConfiguration = async () => {
             if (d) d.value = get(idx, 'description');
         });
         // Payout config
-        const pc = data.payoutConfig || {};
-        const e = document.getElementById('payoutEnabled'); if (e) e.checked = !!pc.enabled;
-        const bu = document.getElementById('payoutBaseUrl'); if (bu) bu.value = pc.baseUrl || 'https://pay.aiffpay.com';
-        const mid = document.getElementById('payoutMerchantId'); if (mid) mid.value = pc.merchantId || '';
-        const mk = document.getElementById('payoutMerchantKey'); if (mk) mk.value = pc.merchantKey || '';
-        const cb = document.getElementById('payoutCallbackUrl'); if (cb) cb.value = pc.callbackUrl || '';
+        const pc = data.paystackConfig || {};
+        const pe = document.getElementById('paystackEnabled'); if (pe) pe.checked = !!pc.enabled;
+        const ps = document.getElementById('paystackSecret'); if (ps) ps.value = pc.secret || '';
         if (document.getElementById('appName')) document.getElementById('appName').value = (data.appConfig && data.appConfig.appName) || 'TGTask';
     } catch (error) {
         console.error('Error loading configuration:', error);
@@ -606,7 +605,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 method: 'POST',
                 body: JSON.stringify({
                     ...formData,
-                    withdrawalsEnabled: !!document.getElementById('withdrawalsEnabled')?.checked
+                    withdrawalsEnabled: !!document.getElementById('withdrawalsEnabled')?.checked,
+                    minReferralsForWithdraw: parseInt(document.getElementById('minReferralsForWithdraw')?.value || '10')
                 })
             });
             
@@ -662,21 +662,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Payout configuration form
-    const payoutForm = document.getElementById('payoutConfigForm');
+    const payoutForm = document.getElementById('paystackConfigForm');
     if (payoutForm) payoutForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const payload = {
-            enabled: !!document.getElementById('payoutEnabled')?.checked,
-            baseUrl: document.getElementById('payoutBaseUrl')?.value || 'https://pay.aiffpay.com',
-            merchantId: document.getElementById('payoutMerchantId')?.value || '',
-            merchantKey: document.getElementById('payoutMerchantKey')?.value || '',
-            callbackUrl: document.getElementById('payoutCallbackUrl')?.value || ''
-        };
+        const payload = { enabled: !!document.getElementById('paystackEnabled')?.checked, secret: document.getElementById('paystackSecret')?.value || '' };
         try {
-            await apiCall('/api/admin/config/payout', { method: 'POST', body: JSON.stringify(payload) });
-            tg.showAlert('✅ Payout configuration saved successfully!');
+            await apiCall('/api/admin/config/paystack', { method: 'POST', body: JSON.stringify(payload) });
+            tg.showAlert('✅ Paystack configuration saved successfully!');
         } catch (err) {
-            tg.showAlert('❌ ' + (err.message || 'Failed to save payout config'));
+            tg.showAlert('❌ ' + (err.message || 'Failed to save Paystack config'));
         }
     });
 
@@ -953,17 +947,65 @@ document.addEventListener('click', async (e) => {
     }
 });
 
+// Modal helper for approval mode selection
+async function showApproveModeDialog() {
+    return new Promise((resolve) => {
+        const existing = document.getElementById('approveModeModal');
+        if (existing) existing.remove();
+        const modal = document.createElement('div');
+        modal.id = 'approveModeModal';
+        modal.style.position = 'fixed';
+        modal.style.inset = '0';
+        modal.style.background = 'rgba(0,0,0,0.5)';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        modal.style.zIndex = '9999';
+
+        modal.innerHTML = `
+            <div style="background:#111827;border:1px solid rgba(255,255,255,0.1);border-radius:12px;max-width:420px;width:90%;padding:16px;">
+                <div style="font-size:16px;font-weight:600;margin-bottom:12px;">Approve Withdrawal</div>
+                <div style="margin-bottom:12px;color:#cbd5e1;font-size:14px;">Choose approval mode:</div>
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <label style="flex:1;display:flex;gap:8px;align-items:center;background:#0f172a;padding:12px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.08);">
+                        <input type="radio" name="approveMode" value="auto" checked>
+                        <span>Automatic (Paystack)</span>
+                    </label>
+                    <label style="flex:1;display:flex;gap:8px;align-items:center;background:#0f172a;padding:12px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.08);">
+                        <input type="radio" name="approveMode" value="manual">
+                        <span>Manual</span>
+                    </label>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button id="approveCancelBtn" class="btn btn-secondary">Cancel</button>
+                    <button id="approveOkBtn" class="btn btn-primary">OK</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const cleanup = () => { try { modal.remove(); } catch (_) {} };
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) { cleanup(); resolve(null); } });
+        modal.querySelector('#approveCancelBtn').addEventListener('click', () => { cleanup(); resolve(null); });
+        modal.querySelector('#approveOkBtn').addEventListener('click', () => {
+            const val = modal.querySelector('input[name="approveMode"]:checked')?.value;
+            cleanup();
+            resolve(val === 'manual' ? 'manual' : 'auto');
+        });
+    });
+}
+
 // Delegate clicks for approve/reject to avoid inline handlers
 document.addEventListener('click', async (e) => {
     const approve = e.target.closest('.approve-withdrawal');
     if (approve) {
         const id = approve.getAttribute('data-id');
         try {
-            // Simple modal via confirm prompts
-            const useAuto = confirm('Approve via Auto Payout?\nOK = Auto (gateway)\nCancel = Manual');
-            const qs = useAuto ? '' : '?mode=manual';
+            const mode = await showApproveModeDialog();
+            if (!mode) return; // cancelled
+            const qs = mode === 'manual' ? '?mode=manual' : '';
             await apiCall(`/api/admin/withdrawals/${id}/approve${qs}`, { method: 'POST' });
-            if (tg && tg.showAlert) tg.showAlert(useAuto ? '✅ Auto payout initiated' : '✅ Withdrawal approved manually'); else alert(useAuto ? 'Auto payout initiated' : 'Withdrawal approved manually');
+            if (tg && tg.showAlert) tg.showAlert(mode === 'manual' ? '✅ Withdrawal approved manually' : '✅ Auto payout initiated'); else alert(mode === 'manual' ? 'Withdrawal approved manually' : 'Auto payout initiated');
             loadWithdrawals();
         } catch (error) {
             if (tg && tg.showAlert) tg.showAlert('❌ ' + error.message); else alert(error.message || 'Error');

@@ -142,57 +142,38 @@ async function getIntConfig(db, key, fallback){
     return Number.isFinite(n) ? n : fallback;
 }
 
-// Payout helpers and config
-function getGatewayBankCode(localBankName){
+// Paystack helpers and config
+function getPaystackBankCode(localBankName){
     const name = String(localBankName || '').toLowerCase();
     const map = {
-        // Map our known bank identifiers to gateway codes
-        // Existing options: kuda, moniepoint, opay, palmpay, smartcash
-        opay: 'NGR999992',
-        palmpay: 'NGR999991',
-        // Additional common banks if we later allow selection by full name
-        'access bank': 'NGR044',
-        'gtbank': 'NGR058',
-        'guaranty trust bank': 'NGR058',
-        'first bank': 'NGR011',
-        'first bank of nigeria': 'NGR011',
-        'zenith bank': 'NGR057',
-        'uba': 'NGR033',
-        'united bank for africa': 'NGR033',
-        'wema bank': 'NGR035',
-        'fidelity bank': 'NGR070',
-        'keystone bank': 'NGR082',
-        'providus bank': 'NGR101',
-        'stanbic ibtc bank': 'NGR221',
-        'sterling bank': 'NGR232',
-        'polaris bank': 'NGR076',
-        'union bank of nigeria': 'NGR032',
+        // Minimal mapping for current options; extend as needed
+        'kuda': '50211', // Kuda Microfinance Bank
+        'moniepoint': '50515', // Moniepoint Microfinance Bank
+        'access bank': '044',
+        'gtbank': '058',
+        'guaranty trust bank': '058',
+        'first bank': '011',
+        'first bank of nigeria': '011',
+        'zenith bank': '057',
+        'uba': '033',
+        'united bank for africa': '033',
+        'wema bank': '035',
+        'fidelity bank': '070',
+        'keystone bank': '082',
+        'providus bank': '101',
+        'stanbic ibtc bank': '221',
+        'sterling bank': '232',
+        'polaris bank': '076',
+        'union bank of nigeria': '032',
     };
     return map[name] || null;
 }
 
-async function getPayoutConfig(db){
+async function getPaystackConfig(db){
     return {
-        enabled: (await getConfig(db, 'payoutAuto', 'false')) === 'true',
-        merchantId: await getConfig(db, 'payoutMerchantId', ''),
-        merchantKey: await getConfig(db, 'payoutMerchantKey', ''),
-        baseUrl: await getConfig(db, 'payoutBaseUrl', 'https://pay.aiffpay.com'),
-        callbackUrl: await getConfig(db, 'payoutCallbackUrl', ''),
+        enabled: (await getConfig(db, 'paystackAuto', 'false')) === 'true',
+        secret: await getConfig(db, 'paystackSecret', '')
     };
-}
-
-function md5(str){ return crypto.createHash('md5').update(str, 'utf8').digest('hex'); }
-
-function buildAiffpaySignature(params, key){
-    // Only include non-empty params in this fixed order
-    const order = ['apply_date','back_url','bank_code','mch_id','mch_transferId','receive_account','receive_name','remark','transfer_amount'];
-    const parts = [];
-    for (const k of order){
-        const v = params[k];
-        if (v !== undefined && v !== null && String(v) !== '') parts.push(`${k}=${v}`);
-    }
-    parts.push(`key=${key}`);
-    return md5(parts.join('&'));
 }
 
 // Admin auth helpers
@@ -389,32 +370,7 @@ async function sendTelegramMessage(chatId, text) {
         });
     } catch (_) {}
 }
-// Gateway callback endpoint (optional). Configure callbackUrl to this path.
-app.post('/api/payout/callback', express.urlencoded({ extended: true }), async (req, res) => {
-    try {
-        const b = req.body || {};
-        const cfg = await getPayoutConfig(req.db);
-        // Verify signature
-        const order = ['applyDate','merNo','merTransferId','respCode','tradeNo','tradeResult','transferAmount','version'];
-        const parts = [];
-        for (const k of order) { if (b[k] != null && String(b[k]) !== '') parts.push(`${k}=${b[k]}`); }
-        parts.push(`key=${cfg.merchantKey || ''}`);
-        const expected = md5(parts.join('&'));
-        if (cfg.merchantKey && b.sign && String(b.sign).toLowerCase() !== expected.toLowerCase()) {
-            return res.status(400).send('bad sign');
-        }
-        // Update matching withdrawal by provider_order_id (merTransferId) if present
-        const w = await req.db.get('SELECT * FROM withdrawals WHERE provider_order_id = ?', [b.merTransferId]);
-        if (w) {
-            const status = String(b.tradeResult) === '1' ? 'completed' : (String(b.tradeResult) === '2' || String(b.tradeResult) === '3' ? 'rejected' : w.status);
-            await req.db.run('UPDATE withdrawals SET status = ?, provider_trade_no = ?, provider_result = ?, callback_received = 1 WHERE id = ?', [status, String(b.tradeNo || ''), String(b.tradeResult || ''), w.id]);
-        }
-        return res.send('success');
-    } catch (e) {
-        console.error('callback error', e);
-        return res.status(500).send('error');
-    }
-});
+// Legacy gateway callback removed; Paystack transfer status will be handled separately.
 
 // Admin: ban/unban user
 app.post('/api/admin/users/ban', async (req, res) => {
@@ -957,7 +913,8 @@ app.get('/api/admin/config', async (req, res) => {
                 bankEditFee: await getIntConfig(req.db, 'bankEditFee', parseInt(process.env.BANK_EDIT_FEE) || 3000),
                 currencySymbol: await getConfig(req.db, 'currencySymbol', process.env.CURRENCY_SYMBOL || '₦'),
                 pointToCurrencyRate: parseFloat(await getConfig(req.db, 'pointToCurrencyRate', process.env.POINT_TO_CURRENCY_RATE || 1)),
-                withdrawalsEnabled: (await getConfig(req.db, 'withdrawalsEnabled', 'true')) !== 'false'
+                withdrawalsEnabled: (await getConfig(req.db, 'withdrawalsEnabled', 'true')) !== 'false',
+                minReferralsForWithdraw: await getIntConfig(req.db, 'minReferralsForWithdraw', 10)
             },
             claimsConfig: {
                 dailyClaimsLimit: await getIntConfig(req.db, 'dailyClaimsLimit', parseInt(process.env.DAILY_CLAIMS_LIMIT) || 5),
@@ -999,12 +956,9 @@ app.get('/api/admin/config', async (req, res) => {
             appConfig: {
                 appName: await getConfig(req.db, 'appName', process.env.APP_NAME || 'TGTask')
             },
-            payoutConfig: {
-                enabled: (await getConfig(req.db, 'payoutAuto', 'false')) === 'true',
-                merchantId: await getConfig(req.db, 'payoutMerchantId', ''),
-                merchantKey: await getConfig(req.db, 'payoutMerchantKey', ''),
-                baseUrl: await getConfig(req.db, 'payoutBaseUrl', 'https://pay.aiffpay.com'),
-                callbackUrl: await getConfig(req.db, 'payoutCallbackUrl', '')
+            paystackConfig: {
+                enabled: (await getConfig(req.db, 'paystackAuto', 'false')) === 'true',
+                secret: await getConfig(req.db, 'paystackSecret', '')
             }
         };
         res.json(response);
@@ -1084,8 +1038,8 @@ app.post('/api/admin/config/points', async (req, res) => {
 
 app.post('/api/admin/config/withdrawal', async (req, res) => {
     try {
-        const { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate, withdrawalsEnabled } = req.body;
-        await setConfig(req.db, { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate, withdrawalsEnabled: withdrawalsEnabled ? 'true' : 'false' });
+        const { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate, withdrawalsEnabled, minReferralsForWithdraw } = req.body;
+        await setConfig(req.db, { minWithdrawal, maxWithdrawal, withdrawalFee, bankEditFee, currencySymbol, pointToCurrencyRate, withdrawalsEnabled: withdrawalsEnabled ? 'true' : 'false', minReferralsForWithdraw });
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating withdrawal config:', error);
@@ -1135,20 +1089,17 @@ app.post('/api/admin/config/app', async (req, res) => {
 });
 
 // Admin: payout gateway config
-app.post('/api/admin/config/payout', async (req, res) => {
+app.post('/api/admin/config/paystack', async (req, res) => {
     try {
         if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
-        const { enabled, merchantId, merchantKey, baseUrl, callbackUrl } = req.body || {};
+        const { enabled, secret } = req.body || {};
         await setConfig(req.db, {
-            payoutAuto: enabled ? 'true' : 'false',
-            payoutMerchantId: merchantId || '',
-            payoutMerchantKey: merchantKey || '',
-            payoutBaseUrl: baseUrl || 'https://pay.aiffpay.com',
-            payoutCallbackUrl: callbackUrl || ''
+            paystackAuto: enabled ? 'true' : 'false',
+            paystackSecret: secret || ''
         });
         res.json({ success: true });
     } catch (e) {
-        console.error('Error saving payout config:', e);
+        console.error('Error saving paystack config:', e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1437,9 +1388,9 @@ app.post('/api/admin/withdrawals/:id/approve', async (req, res) => {
         const bank = await req.db.get('SELECT * FROM bank_details WHERE telegram_id = ?', [w.telegram_id]);
         if (!bank) return res.status(400).json({ error: 'No bank details' });
 
-        // Check payout config
-        const cfg = await getPayoutConfig(req.db);
-        const autoEnabled = cfg.enabled && cfg.merchantId && cfg.merchantKey;
+        // Check Paystack config
+        const cfg = await getPaystackConfig(req.db);
+        const autoEnabled = cfg.enabled && cfg.secret;
 
         if (!autoEnabled || mode === 'manual') {
             // Fallback: just mark as completed
@@ -1448,43 +1399,35 @@ app.post('/api/admin/withdrawals/:id/approve', async (req, res) => {
             return res.json({ success: true, autoPayout: false, mode: 'manual' });
         }
 
-        // Prepare payout payload
-        const bankCode = getGatewayBankCode(bank.bank_name);
-        if (!bankCode) return res.status(400).json({ error: 'Unsupported bank for gateway' });
-        const now = new Date();
-        const pad = (n)=>String(n).padStart(2,'0');
-        const ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-        const merTransferId = `WD${w.id}-${Date.now()}`;
-        const transferAmount = (w.receivable_currency_amount != null ? Number(w.receivable_currency_amount) : Number((w.amount || 0))) .toFixed(2);
-        const payload = {
-            sign_type: 'MD5',
-            mch_id: cfg.merchantId,
-            mch_transferId: merTransferId,
-            transfer_amount: transferAmount,
-            apply_date: ts,
-            bank_code: bankCode,
-            receive_name: bank.account_name,
-            receive_account: bank.account_number,
-            remark: 'Withdrawal',
-            back_url: cfg.callbackUrl || ''
-        };
-        payload.sign = buildAiffpaySignature(payload, cfg.merchantKey);
+        // Paystack: create transfer recipient
+        const bankCode = getPaystackBankCode(bank.bank_name);
+        if (!bankCode) return res.status(400).json({ error: 'Unsupported bank code' });
+        const amountKobo = Math.round((w.receivable_currency_amount != null ? Number(w.receivable_currency_amount) : Number((w.amount || 0))) * 100);
+        const reference = `WD${w.id}-${Date.now()}`;
 
-        // Send to gateway
-        const base = cfg.baseUrl.replace(/\/$/, '');
-        const resp = await fetch(`${base}/pay/transfer`, {
+        const recip = await fetch('https://api.paystack.co/transferrecipient', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams(payload).toString()
-        }).then(r => r.json()).catch(() => null);
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },
+            body: JSON.stringify({ type: 'nuban', name: bank.account_name, account_number: bank.account_number, bank_code: bankCode, currency: 'NGN' })
+        }).then(r=>r.json()).catch(()=>null);
+        if (!recip || !recip.status || !(recip.data && recip.data.recipient_code)) {
+            return res.status(500).json({ error: 'Failed to create transfer recipient' });
+        }
+        const recipientCode = recip.data.recipient_code;
 
-        // Record provider response
-        const tradeNo = resp && resp.tradeNo ? String(resp.tradeNo) : null;
-        const tradeResult = resp && resp.tradeResult != null ? String(resp.tradeResult) : null;
-        await req.db.run(`UPDATE withdrawals SET provider='aiffpay', provider_order_id = ?, provider_trade_no = ?, provider_result = ?, processed_at = datetime('now'), status = 'completed' WHERE id = ?`, [merTransferId, tradeNo, tradeResult, id]);
+        const tr = await fetch('https://api.paystack.co/transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },
+            body: JSON.stringify({ source: 'balance', amount: amountKobo, recipient: recipientCode, reason: 'Withdrawal', reference })
+        }).then(r=>r.json()).catch(()=>null);
+        if (!tr || !tr.status) {
+            return res.status(500).json({ error: 'Failed to initiate transfer' });
+        }
 
-        if (w.telegram_id) await sendTelegramMessage(w.telegram_id, `✅ Your withdrawal is being processed. Ref: ${merTransferId}`);
-        res.json({ success: true, autoPayout: true, provider: 'aiffpay', response: resp });
+        await req.db.run(`UPDATE withdrawals SET provider='paystack', provider_order_id = ?, provider_trade_no = ?, provider_result = ?, processed_at = datetime('now'), status = 'pending' WHERE id = ?`, [reference, tr.data && tr.data.transfer_code ? String(tr.data.transfer_code) : null, tr.message || '', id]);
+
+        if (w.telegram_id) await sendTelegramMessage(w.telegram_id, `✅ Your withdrawal is being processed. Ref: ${reference}`);
+        res.json({ success: true, autoPayout: true, provider: 'paystack', response: tr });
     } catch (error) {
         console.error('Error approving withdrawal:', error);
         res.status(500).json({ error: 'Internal server error' });

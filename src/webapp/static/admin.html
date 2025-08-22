@@ -459,6 +459,12 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group">
+                            <label class="form-label">Min Successful Referrals To Withdraw</label>
+                            <input type="number" class="form-input" id="minReferralsForWithdraw" placeholder="10" min="0">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
                             <label class="form-label">Currency Symbol</label>
                             <input type="text" class="form-input" id="currencySymbol" placeholder="₦">
                         </div>
@@ -579,33 +585,19 @@
                     </button>
                 </form>
                 <div style="height:12px"></div>
-                <div class="config-title"><i class="fas fa-plug"></i> Payout Gateway</div>
-                <form id="payoutConfigForm">
+                <div class="config-title"><i class="fas fa-plug"></i> Paystack Payout</div>
+                <form id="paystackConfigForm">
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">Enable Auto Payout</label>
-                            <input type="checkbox" id="payoutEnabled">
+                            <input type="checkbox" id="paystackEnabled">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Base URL</label>
-                            <input type="text" class="form-input" id="payoutBaseUrl" placeholder="https://pay.aiffpay.com">
+                            <label class="form-label">Paystack Secret Key</label>
+                            <input type="password" class="form-input" id="paystackSecret" placeholder="sk_live_...">
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">Merchant ID</label>
-                            <input type="text" class="form-input" id="payoutMerchantId" placeholder="Enter Merchant ID">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Merchant Key</label>
-                            <input type="text" class="form-input" id="payoutMerchantKey" placeholder="Enter Merchant Key">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Callback URL (optional)</label>
-                        <input type="text" class="form-input" id="payoutCallbackUrl" placeholder="https://yourdomain.com/api/payout/callback">
-                    </div>
-                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Payout Config</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Paystack Config</button>
                 </form>
             </div>
 
