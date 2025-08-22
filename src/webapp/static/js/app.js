@@ -276,9 +276,11 @@ const pageLoaders = {
             <div class="page-title">Tasks</div>
             
             <div class="tabs">
-                <div class="tab active" data-task-tab="telegram"><span class="iconify" data-icon="mdi:telegram"></span> Telegram</div>
-                <div class="tab" data-task-tab="whatsapp"><span class="iconify" data-icon="mdi:whatsapp"></span> WhatsApp</div>
-                <div class="tab" data-task-tab="facebook"><span class="iconify" data-icon="mdi:facebook"></span> Facebook</div>
+                <div class="tab active" data-task-tab="telegram">Telegram</div>
+                <div class="tab" data-task-tab="whatsapp">WhatsApp</div>
+                <div class="tab" data-task-tab="facebook">Facebook</div>
+                <div class="tab" data-task-tab="tiktok">TikTok</div>
+                <div class="tab" data-task-tab="website">Website</div>
             </div>
 
             <div id="tasksContent">
@@ -1112,7 +1114,7 @@ function renderTasks(tasks, platform = 'telegram') {
         }
     } else if (platform === 'whatsapp') {
         if (tasks.whatsapp && tasks.whatsapp.length > 0) {
-            html += '<h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;"><span class="iconify" data-icon="mdi:whatsapp"></span> WhatsApp Tasks</h3>';
+            html += '<h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">WhatsApp Tasks</h3>';
             tasks.whatsapp.forEach(t => {
                 const isPending = t.claim_status === 'pending';
                 html += `
@@ -1123,16 +1125,14 @@ function renderTasks(tasks, platform = 'telegram') {
                         </div>
                         <div class="task-description">${t.description ? t.description : ''}</div>
                         <div class="task-actions">
-                            <a href="${t.task_link}" target="_blank" class="btn btn-secondary">
-                                <span class="iconify" data-icon="mdi:open-in-new"></span> Open
-                            </a>
+                            <a href="${t.task_link}" target="_blank" class="btn btn-secondary">Open</a>
                             ${isPending ? `
                                 <button class="btn btn-secondary social-pending" data-social-id="${t.id}" disabled>
-                                    <span class="iconify" data-icon="mdi:clock-outline"></span> Pending...
+                                    Pending...
                                 </button>
                             ` : `
                                 <button class="btn btn-primary social-claim-btn" data-social-id="${t.id}">
-                                    <span class="iconify" data-icon="mdi:clock-outline"></span> Claim
+                                    Claim
                                 </button>
                             `}
                         </div>
@@ -1140,11 +1140,11 @@ function renderTasks(tasks, platform = 'telegram') {
                 `;
             });
         } else {
-            html = '<div class="empty-state"><span class="iconify" data-icon="mdi:whatsapp"></span><h3>No WhatsApp tasks</h3><p>Admin hasn\'t added any WhatsApp tasks yet.</p></div>';
+            html = '<div class="empty-state"><h3>No WhatsApp tasks</h3><p>Admin hasn\'t added any WhatsApp tasks yet.</p></div>';
         }
     } else if (platform === 'facebook') {
         if (tasks.facebook && tasks.facebook.length > 0) {
-            html += '<h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;"><span class="iconify" data-icon="mdi:facebook"></span> Facebook Tasks</h3>';
+            html += '<h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Facebook Tasks</h3>';
             tasks.facebook.forEach(t => {
                 const isPending = t.claim_status === 'pending';
                 html += `
@@ -1155,16 +1155,14 @@ function renderTasks(tasks, platform = 'telegram') {
                         </div>
                         <div class="task-description">${t.description ? t.description : ''}</div>
                         <div class="task-actions">
-                            <a href="${t.task_link}" target="_blank" class="btn btn-secondary">
-                                <span class="iconify" data-icon="mdi:open-in-new"></span> Open
-                            </a>
+                            <a href="${t.task_link}" target="_blank" class="btn btn-secondary">Open</a>
                             ${isPending ? `
                                 <button class="btn btn-secondary social-pending" data-social-id="${t.id}" disabled>
-                                    <span class="iconify" data-icon="mdi:clock-outline"></span> Pending...
+                                    Pending...
                                 </button>
                             ` : `
                                 <button class="btn btn-primary social-claim-btn" data-social-id="${t.id}">
-                                    <span class="iconify" data-icon="mdi:clock-outline"></span> Claim
+                                    Claim
                                 </button>
                             `}
                         </div>
@@ -1172,7 +1170,67 @@ function renderTasks(tasks, platform = 'telegram') {
                 `;
             });
         } else {
-            html = '<div class="empty-state"><span class="iconify" data-icon="mdi:facebook"></span><h3>No Facebook tasks</h3><p>Admin hasn\'t added any Facebook tasks yet.</p></div>';
+            html = '<div class="empty-state"><h3>No Facebook tasks</h3><p>Admin hasn\'t added any Facebook tasks yet.</p></div>';
+        }
+    } else if (platform === 'tiktok') {
+        if (tasks.tiktok && tasks.tiktok.length > 0) {
+            html += '<h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">TikTok Tasks</h3>';
+            tasks.tiktok.forEach(t => {
+                const isPending = t.claim_status === 'pending';
+                html += `
+                    <div class="task-card">
+                        <div class="task-header">
+                            <div class="task-title">${t.task_name}</div>
+                            <div class="task-points">+${t.points_reward}</div>
+                        </div>
+                        <div class="task-description">${t.description ? t.description : ''}</div>
+                        <div class="task-actions">
+                            <a href="${t.task_link}" target="_blank" class="btn btn-secondary">Open</a>
+                            ${isPending ? `
+                                <button class="btn btn-secondary social-pending" data-social-id="${t.id}" disabled>
+                                    Pending...
+                                </button>
+                            ` : `
+                                <button class="btn btn-primary social-claim-btn" data-social-id="${t.id}">
+                                    Claim
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            html = '<div class="empty-state"><h3>No TikTok tasks</h3><p>Admin hasn\'t added any TikTok tasks yet.</p></div>';
+        }
+    } else if (platform === 'website') {
+        if (tasks.website && tasks.website.length > 0) {
+            html += '<h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Website Tasks</h3>';
+            tasks.website.forEach(t => {
+                const isPending = t.claim_status === 'pending';
+                html += `
+                    <div class="task-card">
+                        <div class="task-header">
+                            <div class="task-title">${t.task_name}</div>
+                            <div class="task-points">+${t.points_reward}</div>
+                        </div>
+                        <div class="task-description">${t.description ? t.description : ''}</div>
+                        <div class="task-actions">
+                            <a href="${t.task_link}" target="_blank" class="btn btn-secondary">Open</a>
+                            ${isPending ? `
+                                <button class="btn btn-secondary social-pending" data-social-id="${t.id}" disabled>
+                                    Pending...
+                                </button>
+                            ` : `
+                                <button class="btn btn-primary social-claim-btn" data-social-id="${t.id}">
+                                    Claim
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            html = '<div class="empty-state"><h3>No Website tasks</h3><p>Admin hasn\'t added any Website tasks yet.</p></div>';
         }
     }
 
@@ -1315,17 +1373,20 @@ function renderHistory(historyData, type) {
                 const date = new Date(withdrawal.created_at).toLocaleDateString();
                 const statusClass = withdrawal.status === 'pending' ? 'status-pending' : 
                                   withdrawal.status === 'completed' ? 'status-completed' : 'status-failed';
+                const recvPts = (withdrawal.receivable_points != null) ? withdrawal.receivable_points : withdrawal.amount;
+                const recvCur = (withdrawal.receivable_currency_amount != null) ? Number(withdrawal.receivable_currency_amount) : null;
                 
                 html += `
                     <div class="history-item">
                         <div class="history-header">
                             <div class="history-title">Withdrawal</div>
-                            <div class="history-amount">-${withdrawal.amount}</div>
+                            <div class="history-amount">-${formatNumber(recvPts)} pts</div>
                         </div>
                         <div class="history-sub">
                             <div class="history-date">${date}</div>
                             <div class="history-status ${statusClass}">${withdrawal.status}</div>
                         </div>
+                        ${recvCur != null ? `<div class="history-date">Receives: ${recvCur.toFixed(2)}</div>` : ''}
                     </div>
                 `;
             });

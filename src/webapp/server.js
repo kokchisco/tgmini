@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const crypto = require('crypto');
 const database = require('../database/connection');
 const userService = require('../services/userService');
 const taskService = require('../services/taskService');
@@ -76,6 +77,15 @@ app.use(async (req, res, next) => {
         try {
             await req.db.run(`ALTER TABLE claims_history ADD COLUMN source TEXT DEFAULT 'daily'`);
         } catch (_) { /* ignore if exists */ }
+        // Add enhanced withdrawal columns if missing
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN fee_points INTEGER DEFAULT 0`); } catch (_) {}
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN receivable_points INTEGER DEFAULT NULL`); } catch (_) {}
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN receivable_currency_amount REAL DEFAULT 0`); } catch (_) {}
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN provider TEXT`); } catch (_) {}
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN provider_order_id TEXT`); } catch (_) {}
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN provider_trade_no TEXT`); } catch (_) {}
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN provider_result TEXT`); } catch (_) {}
+        try { await req.db.run(`ALTER TABLE withdrawals ADD COLUMN callback_received INTEGER DEFAULT 0`); } catch (_) {}
     }
     next();
 });
@@ -132,6 +142,59 @@ async function getIntConfig(db, key, fallback){
     return Number.isFinite(n) ? n : fallback;
 }
 
+// Payout helpers and config
+function getGatewayBankCode(localBankName){
+    const name = String(localBankName || '').toLowerCase();
+    const map = {
+        // Map our known bank identifiers to gateway codes
+        // Existing options: kuda, moniepoint, opay, palmpay, smartcash
+        opay: 'NGR999992',
+        palmpay: 'NGR999991',
+        // Additional common banks if we later allow selection by full name
+        'access bank': 'NGR044',
+        'gtbank': 'NGR058',
+        'guaranty trust bank': 'NGR058',
+        'first bank': 'NGR011',
+        'first bank of nigeria': 'NGR011',
+        'zenith bank': 'NGR057',
+        'uba': 'NGR033',
+        'united bank for africa': 'NGR033',
+        'wema bank': 'NGR035',
+        'fidelity bank': 'NGR070',
+        'keystone bank': 'NGR082',
+        'providus bank': 'NGR101',
+        'stanbic ibtc bank': 'NGR221',
+        'sterling bank': 'NGR232',
+        'polaris bank': 'NGR076',
+        'union bank of nigeria': 'NGR032',
+    };
+    return map[name] || null;
+}
+
+async function getPayoutConfig(db){
+    return {
+        enabled: (await getConfig(db, 'payoutAuto', 'false')) === 'true',
+        merchantId: await getConfig(db, 'payoutMerchantId', ''),
+        merchantKey: await getConfig(db, 'payoutMerchantKey', ''),
+        baseUrl: await getConfig(db, 'payoutBaseUrl', 'https://pay.aiffpay.com'),
+        callbackUrl: await getConfig(db, 'payoutCallbackUrl', ''),
+    };
+}
+
+function md5(str){ return crypto.createHash('md5').update(str, 'utf8').digest('hex'); }
+
+function buildAiffpaySignature(params, key){
+    // Only include non-empty params in this fixed order
+    const order = ['apply_date','back_url','bank_code','mch_id','mch_transferId','receive_account','receive_name','remark','transfer_amount'];
+    const parts = [];
+    for (const k of order){
+        const v = params[k];
+        if (v !== undefined && v !== null && String(v) !== '') parts.push(`${k}=${v}`);
+    }
+    parts.push(`key=${key}`);
+    return md5(parts.join('&'));
+}
+
 // Admin auth helpers
 function getAdminId(req) {
     try {
@@ -181,6 +244,8 @@ async function finalizeDueSocialClaims(db, userId){
             if (userRow && userRow.telegram_id) {
                 await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at) VALUES (?, ?, datetime('now'))`, [userRow.telegram_id, claim.points_earned]);
             }
+            // increment daily limits
+            try { await userService.updateDailyLimit(tx, userId, claim.points_earned); } catch(_) {}
         });
     }
 }
@@ -324,6 +389,32 @@ async function sendTelegramMessage(chatId, text) {
         });
     } catch (_) {}
 }
+// Gateway callback endpoint (optional). Configure callbackUrl to this path.
+app.post('/api/payout/callback', express.urlencoded({ extended: true }), async (req, res) => {
+    try {
+        const b = req.body || {};
+        const cfg = await getPayoutConfig(req.db);
+        // Verify signature
+        const order = ['applyDate','merNo','merTransferId','respCode','tradeNo','tradeResult','transferAmount','version'];
+        const parts = [];
+        for (const k of order) { if (b[k] != null && String(b[k]) !== '') parts.push(`${k}=${b[k]}`); }
+        parts.push(`key=${cfg.merchantKey || ''}`);
+        const expected = md5(parts.join('&'));
+        if (cfg.merchantKey && b.sign && String(b.sign).toLowerCase() !== expected.toLowerCase()) {
+            return res.status(400).send('bad sign');
+        }
+        // Update matching withdrawal by provider_order_id (merTransferId) if present
+        const w = await req.db.get('SELECT * FROM withdrawals WHERE provider_order_id = ?', [b.merTransferId]);
+        if (w) {
+            const status = String(b.tradeResult) === '1' ? 'completed' : (String(b.tradeResult) === '2' || String(b.tradeResult) === '3' ? 'rejected' : w.status);
+            await req.db.run('UPDATE withdrawals SET status = ?, provider_trade_no = ?, provider_result = ?, callback_received = 1 WHERE id = ?', [status, String(b.tradeNo || ''), String(b.tradeResult || ''), w.id]);
+        }
+        return res.send('success');
+    } catch (e) {
+        console.error('callback error', e);
+        return res.status(500).send('error');
+    }
+});
 
 // Admin: ban/unban user
 app.post('/api/admin/users/ban', async (req, res) => {
@@ -389,14 +480,16 @@ app.get('/api/tasks/:telegramId', async (req, res) => {
         const channels = (availableTasks.channels || [])
             .filter(c => c.is_active === 1 || c.is_active === true || c.is_active === undefined)
             .map(normalizeChannel)
-            .filter(c => c.channel_link && c.channel_link.startsWith('https://t.me/'));
+            .filter(c => c.channel_link && c.channel_link.startsWith('https://t.me/'))
+            .sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
         const groups = (availableTasks.groups || [])
             .filter(g => g.is_active === 1 || g.is_active === true || g.is_active === undefined)
             .map(normalizeGroup)
-            .filter(g => g.group_link && g.group_link.startsWith('https://t.me/'));
+            .filter(g => g.group_link && g.group_link.startsWith('https://t.me/'))
+            .sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
         
         // Social tasks (facebook/whatsapp)
-        const socialRaw = await req.db.all(`SELECT * FROM social_tasks WHERE is_active = 1 ORDER BY created_at DESC`);
+        const socialRaw = await req.db.all(`SELECT * FROM social_tasks WHERE is_active = 1 ORDER BY created_at ASC`);
         const claimedSocial = await req.db.all('SELECT * FROM user_social_claims WHERE user_id = ?', [user.id]);
         const taskIdToClaim = new Map((claimedSocial || []).map(r => [r.social_task_id, r]));
         const decorate = (t) => {
@@ -413,12 +506,20 @@ app.get('/api/tasks/:telegramId', async (req, res) => {
         const whatsapp = socialRaw.filter(r => r.platform === 'whatsapp')
                                    .map(decorate)
                                    .filter(t => t.claim_status !== 'completed');
+        const tiktok = socialRaw.filter(r => r.platform === 'tiktok')
+                                 .map(decorate)
+                                 .filter(t => t.claim_status !== 'completed');
+        const website = socialRaw.filter(r => r.platform === 'website')
+                                  .map(decorate)
+                                  .filter(t => t.claim_status !== 'completed');
 
         res.json({
             channels,
             groups,
             facebook,
             whatsapp,
+            tiktok,
+            website,
             dailyLimit,
             pointsPerFriend: parseInt(process.env.POINTS_PER_FRIEND_INVITE) || 25
         });
@@ -897,6 +998,13 @@ app.get('/api/admin/config', async (req, res) => {
             },
             appConfig: {
                 appName: await getConfig(req.db, 'appName', process.env.APP_NAME || 'TGTask')
+            },
+            payoutConfig: {
+                enabled: (await getConfig(req.db, 'payoutAuto', 'false')) === 'true',
+                merchantId: await getConfig(req.db, 'payoutMerchantId', ''),
+                merchantKey: await getConfig(req.db, 'payoutMerchantKey', ''),
+                baseUrl: await getConfig(req.db, 'payoutBaseUrl', 'https://pay.aiffpay.com'),
+                callbackUrl: await getConfig(req.db, 'payoutCallbackUrl', '')
             }
         };
         res.json(response);
@@ -1022,6 +1130,25 @@ app.post('/api/admin/config/app', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating app config:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Admin: payout gateway config
+app.post('/api/admin/config/payout', async (req, res) => {
+    try {
+        if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
+        const { enabled, merchantId, merchantKey, baseUrl, callbackUrl } = req.body || {};
+        await setConfig(req.db, {
+            payoutAuto: enabled ? 'true' : 'false',
+            payoutMerchantId: merchantId || '',
+            payoutMerchantKey: merchantKey || '',
+            payoutBaseUrl: baseUrl || 'https://pay.aiffpay.com',
+            payoutCallbackUrl: callbackUrl || ''
+        });
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Error saving payout config:', e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1302,19 +1429,62 @@ app.delete('/api/admin/groups/:id', async (req, res) => {
 app.post('/api/admin/withdrawals/:id/approve', async (req, res) => {
     try {
         const { id } = req.params;
-        
-        await req.db.run(`
-            UPDATE withdrawals 
-            SET status = 'completed', processed_at = datetime('now')
-            WHERE id = ?
-        `, [id]);
-        
-        // Notify user about approval
+        // Optional mode override: 'auto' | 'manual'
+        const mode = String((req.query && req.query.mode) || (req.body && req.body.mode) || 'auto').toLowerCase();
+        // Load withdrawal and bank details
         const w = await req.db.get('SELECT * FROM withdrawals WHERE id = ?', [id]);
-        if (w && w.telegram_id) {
-            await sendTelegramMessage(w.telegram_id, `✅ Your withdrawal of ${w.amount} points has been approved.`);
+        if (!w) return res.status(404).json({ error: 'Withdrawal not found' });
+        const bank = await req.db.get('SELECT * FROM bank_details WHERE telegram_id = ?', [w.telegram_id]);
+        if (!bank) return res.status(400).json({ error: 'No bank details' });
+
+        // Check payout config
+        const cfg = await getPayoutConfig(req.db);
+        const autoEnabled = cfg.enabled && cfg.merchantId && cfg.merchantKey;
+
+        if (!autoEnabled || mode === 'manual') {
+            // Fallback: just mark as completed
+            await req.db.run(`UPDATE withdrawals SET status='completed', processed_at = datetime('now') WHERE id = ?`, [id]);
+            if (w.telegram_id) await sendTelegramMessage(w.telegram_id, `✅ Your withdrawal of ${w.receivable_points || w.amount} points has been approved.`);
+            return res.json({ success: true, autoPayout: false, mode: 'manual' });
         }
-        res.json({ success: true });
+
+        // Prepare payout payload
+        const bankCode = getGatewayBankCode(bank.bank_name);
+        if (!bankCode) return res.status(400).json({ error: 'Unsupported bank for gateway' });
+        const now = new Date();
+        const pad = (n)=>String(n).padStart(2,'0');
+        const ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        const merTransferId = `WD${w.id}-${Date.now()}`;
+        const transferAmount = (w.receivable_currency_amount != null ? Number(w.receivable_currency_amount) : Number((w.amount || 0))) .toFixed(2);
+        const payload = {
+            sign_type: 'MD5',
+            mch_id: cfg.merchantId,
+            mch_transferId: merTransferId,
+            transfer_amount: transferAmount,
+            apply_date: ts,
+            bank_code: bankCode,
+            receive_name: bank.account_name,
+            receive_account: bank.account_number,
+            remark: 'Withdrawal',
+            back_url: cfg.callbackUrl || ''
+        };
+        payload.sign = buildAiffpaySignature(payload, cfg.merchantKey);
+
+        // Send to gateway
+        const base = cfg.baseUrl.replace(/\/$/, '');
+        const resp = await fetch(`${base}/pay/transfer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(payload).toString()
+        }).then(r => r.json()).catch(() => null);
+
+        // Record provider response
+        const tradeNo = resp && resp.tradeNo ? String(resp.tradeNo) : null;
+        const tradeResult = resp && resp.tradeResult != null ? String(resp.tradeResult) : null;
+        await req.db.run(`UPDATE withdrawals SET provider='aiffpay', provider_order_id = ?, provider_trade_no = ?, provider_result = ?, processed_at = datetime('now'), status = 'completed' WHERE id = ?`, [merTransferId, tradeNo, tradeResult, id]);
+
+        if (w.telegram_id) await sendTelegramMessage(w.telegram_id, `✅ Your withdrawal is being processed. Ref: ${merTransferId}`);
+        res.json({ success: true, autoPayout: true, provider: 'aiffpay', response: resp });
     } catch (error) {
         console.error('Error approving withdrawal:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -1330,11 +1500,8 @@ app.post('/api/admin/withdrawals/:id/reject', async (req, res) => {
         
         if (withdrawal) {
             // Refund points to user
-            await req.db.run(`
-                UPDATE users 
-                SET points = points + ? 
-                WHERE telegram_id = ?
-            `, [withdrawal.amount, withdrawal.telegram_id]);
+            const refund = withdrawal.amount || 0; // refund full points deducted at request-time
+            await req.db.run(`UPDATE users SET points = points + ? WHERE telegram_id = ?`, [refund, withdrawal.telegram_id]);
             
             // Update withdrawal status
             await req.db.run(`
@@ -1452,10 +1619,15 @@ app.post('/api/social/claim-request', async (req, res) => {
             return res.json({ success: true, status: existing.status, availableAt: existing.available_at });
         }
 
-        // 15 minutes delay
+        // Enforce daily limit before accepting the request
+        const dailyLimit = await userService.checkDailyLimit(req.db, user.id);
+        if (!dailyLimit.can_complete) return res.status(400).json({ error: 'Daily task limit reached' });
+
+        // Delay by platform: social = 15m, website = 20m
+        const delayMinutes = task.platform === 'website' ? 20 : 15;
         await req.db.run(`
             INSERT INTO user_social_claims (user_id, social_task_id, status, points_earned, requested_at, available_at)
-            VALUES (?, ?, 'pending', ?, datetime('now'), datetime('now', '+15 minutes'))
+            VALUES (?, ?, 'pending', ?, datetime('now'), datetime('now', '+${delayMinutes} minutes'))
         `, [user.id, socialTaskId, task.points_reward]);
 
         res.json({ success: true, status: 'pending' });
@@ -1918,6 +2090,13 @@ app.post('/api/withdraw', async (req, res) => {
             if (!chOk || !grOk) return res.status(403).json({ error: 'Join the community first' });
         }
 
+        // Compute fees and receivables
+        const withdrawalFeePct = parseFloat(await getConfig(req.db, 'withdrawalFee', process.env.WITHDRAWAL_FEE_PERCENTAGE || 5));
+        const currencyRate = parseFloat(await getConfig(req.db, 'pointToCurrencyRate', process.env.POINT_TO_CURRENCY_RATE || 1));
+        const feePoints = Math.floor((amount * (isNaN(withdrawalFeePct) ? 0 : withdrawalFeePct)) / 100);
+        const receivablePoints = Math.max(0, amount - feePoints);
+        const receivableCurrency = receivablePoints * (isNaN(currencyRate) ? 1 : currencyRate);
+
         // Create withdrawal atomically and deduct points under a transaction to avoid race conditions
         await req.db.transaction(async (tx) => {
             // Lock user row where supported (Postgres); SQLite will ignore FOR UPDATE gracefully
@@ -1934,9 +2113,9 @@ app.post('/api/withdraw', async (req, res) => {
             if (!freshUser || (freshUser.points || 0) < amount) throw new Error('Insufficient points');
 
             await tx.run(`
-                INSERT INTO withdrawals (telegram_id, amount, status, created_at)
-                VALUES (?, ?, 'pending', datetime('now'))
-            `, [telegramId, amount]);
+                INSERT INTO withdrawals (telegram_id, amount, status, created_at, fee_points, receivable_points, receivable_currency_amount)
+                VALUES (?, ?, 'pending', datetime('now'), ?, ?, ?)
+            `, [telegramId, amount, feePoints, receivablePoints, receivableCurrency]);
             await tx.run(`UPDATE users SET points = points - ?, updated_at = datetime('now') WHERE id = ?`, [amount, user.id]);
         });
 
@@ -2111,7 +2290,7 @@ app.get('/api/history/:telegramId', async (req, res) => {
 
         if (type === 'withdrawals') {
             const withdrawals = await req.db.all(`
-                SELECT * FROM withdrawals 
+                SELECT id, telegram_id, amount, status, created_at, processed_at, fee_points, receivable_points, receivable_currency_amount 
                 WHERE telegram_id = ? 
                 ORDER BY created_at DESC 
                 LIMIT 20

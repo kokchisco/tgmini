@@ -516,7 +516,7 @@
             <div class="config-card">
                 <div class="config-title">
                     <i class="fas fa-headset"></i>
-                    Support Configuration
+                    Support & Payout Configuration
                 </div>
                 <form id="supportConfigForm">
                     <div class="form-group">
@@ -577,6 +577,35 @@
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> Save Support Config
                     </button>
+                </form>
+                <div style="height:12px"></div>
+                <div class="config-title"><i class="fas fa-plug"></i> Payout Gateway</div>
+                <form id="payoutConfigForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Enable Auto Payout</label>
+                            <input type="checkbox" id="payoutEnabled">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Base URL</label>
+                            <input type="text" class="form-input" id="payoutBaseUrl" placeholder="https://pay.aiffpay.com">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Merchant ID</label>
+                            <input type="text" class="form-input" id="payoutMerchantId" placeholder="Enter Merchant ID">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Merchant Key</label>
+                            <input type="text" class="form-input" id="payoutMerchantKey" placeholder="Enter Merchant Key">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Callback URL (optional)</label>
+                        <input type="text" class="form-input" id="payoutCallbackUrl" placeholder="https://yourdomain.com/api/payout/callback">
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Payout Config</button>
                 </form>
             </div>
 
@@ -675,7 +704,7 @@
             <div class="config-card">
                 <div class="config-title">
                     <i class="fas fa-plus"></i>
-                    Add Social Task (Facebook/WhatsApp)
+                    Add Social Task (Facebook/WhatsApp/TikTok/Website)
                 </div>
                 <form id="addSocialTaskForm">
                     <div class="form-row">
@@ -684,6 +713,8 @@
                             <select class="form-select" id="socialPlatform">
                                 <option value="facebook">Facebook</option>
                                 <option value="whatsapp">WhatsApp</option>
+                                <option value="tiktok">TikTok</option>
+                                <option value="website">Website</option>
                             </select>
                         </div>
                         <div class="form-group">

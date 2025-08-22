@@ -177,6 +177,13 @@ const loadConfiguration = async () => {
             if (u) u.value = get(idx, 'username');
             if (d) d.value = get(idx, 'description');
         });
+        // Payout config
+        const pc = data.payoutConfig || {};
+        const e = document.getElementById('payoutEnabled'); if (e) e.checked = !!pc.enabled;
+        const bu = document.getElementById('payoutBaseUrl'); if (bu) bu.value = pc.baseUrl || 'https://pay.aiffpay.com';
+        const mid = document.getElementById('payoutMerchantId'); if (mid) mid.value = pc.merchantId || '';
+        const mk = document.getElementById('payoutMerchantKey'); if (mk) mk.value = pc.merchantKey || '';
+        const cb = document.getElementById('payoutCallbackUrl'); if (cb) cb.value = pc.callbackUrl || '';
         if (document.getElementById('appName')) document.getElementById('appName').value = (data.appConfig && data.appConfig.appName) || 'TGTask';
     } catch (error) {
         console.error('Error loading configuration:', error);
@@ -654,6 +661,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Payout configuration form
+    const payoutForm = document.getElementById('payoutConfigForm');
+    if (payoutForm) payoutForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+            enabled: !!document.getElementById('payoutEnabled')?.checked,
+            baseUrl: document.getElementById('payoutBaseUrl')?.value || 'https://pay.aiffpay.com',
+            merchantId: document.getElementById('payoutMerchantId')?.value || '',
+            merchantKey: document.getElementById('payoutMerchantKey')?.value || '',
+            callbackUrl: document.getElementById('payoutCallbackUrl')?.value || ''
+        };
+        try {
+            await apiCall('/api/admin/config/payout', { method: 'POST', body: JSON.stringify(payload) });
+            tg.showAlert('✅ Payout configuration saved successfully!');
+        } catch (err) {
+            tg.showAlert('❌ ' + (err.message || 'Failed to save payout config'));
+        }
+    });
+
     // App configuration form
     const appForm = document.getElementById('appConfigForm');
     if (appForm) appForm.addEventListener('submit', async (e) => {
@@ -933,8 +959,11 @@ document.addEventListener('click', async (e) => {
     if (approve) {
         const id = approve.getAttribute('data-id');
         try {
-            await apiCall(`/api/admin/withdrawals/${id}/approve`, { method: 'POST' });
-            if (tg && tg.showAlert) tg.showAlert('✅ Withdrawal approved!'); else alert('Withdrawal approved');
+            // Simple modal via confirm prompts
+            const useAuto = confirm('Approve via Auto Payout?\nOK = Auto (gateway)\nCancel = Manual');
+            const qs = useAuto ? '' : '?mode=manual';
+            await apiCall(`/api/admin/withdrawals/${id}/approve${qs}`, { method: 'POST' });
+            if (tg && tg.showAlert) tg.showAlert(useAuto ? '✅ Auto payout initiated' : '✅ Withdrawal approved manually'); else alert(useAuto ? 'Auto payout initiated' : 'Withdrawal approved manually');
             loadWithdrawals();
         } catch (error) {
             if (tg && tg.showAlert) tg.showAlert('❌ ' + error.message); else alert(error.message || 'Error');
