@@ -2032,6 +2032,25 @@ app.post('/api/withdraw', async (req, res) => {
             return res.status(403).json({ error: 'Withdrawals are closed for now. Please try again later.' });
         }
 
+        // Require minimum successful referrals to withdraw
+        try {
+            const minReferralsRequired = parseInt(await getConfig(req.db, 'minReferralsForWithdraw', '10'));
+            if (Number.isFinite(minReferralsRequired) && minReferralsRequired > 0) {
+                const okReferrals = await req.db.get(
+                    `SELECT COUNT(*) as cnt
+                     FROM friend_invitations fi
+                     WHERE fi.inviter_id = ? AND fi.status = 'completed'`,
+                    [user.id]
+                );
+                const numOk = (okReferrals && okReferrals.cnt) ? parseInt(okReferrals.cnt) : 0;
+                if (numOk < minReferralsRequired) {
+                    return res.status(400).json({ error: `You need at least ${minReferralsRequired} successful referrals to withdraw.` });
+                }
+            }
+        } catch (_) {
+            return res.status(400).json({ error: 'You need at least 10 successful referrals to withdraw.' });
+        }
+
         // Treat amounts as points (no currency symbol)
         const minWithdrawal = await getIntConfig(req.db, 'minWithdrawal', parseInt(process.env.MIN_WITHDRAWAL_AMOUNT) || 1000);
         const maxWithdrawal = await getIntConfig(req.db, 'maxWithdrawal', parseInt(process.env.MAX_WITHDRAWAL_AMOUNT) || 50000);
