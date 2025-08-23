@@ -164,11 +164,13 @@ async function ensureAdsTables(db){
         if (isPg) {
             await db.run(`CREATE TABLE IF NOT EXISTS ads_clicks (
                 id SERIAL PRIMARY KEY,
-                telegram_id INTEGER NOT NULL,
+                telegram_id BIGINT NOT NULL,
                 provider TEXT NOT NULL,
                 click_id TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`);
+            // Migrate column type if table existed with INTEGER
+            try { await db.run(`ALTER TABLE ads_clicks ALTER COLUMN telegram_id TYPE BIGINT USING telegram_id::bigint`); } catch (_) {}
         } else {
             await db.run(`CREATE TABLE IF NOT EXISTS ads_clicks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,7 +185,7 @@ async function ensureAdsTables(db){
         if (isPg) {
             await db.run(`CREATE TABLE IF NOT EXISTS ads_earnings (
                 id SERIAL PRIMARY KEY,
-                telegram_id INTEGER NOT NULL,
+                telegram_id BIGINT NOT NULL,
                 provider TEXT NOT NULL,
                 provider_txid TEXT,
                 click_id TEXT,
@@ -192,6 +194,8 @@ async function ensureAdsTables(db){
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT unique_provider_tx UNIQUE(provider, provider_txid)
             )`);
+            // Migrate column type if table existed with INTEGER
+            try { await db.run(`ALTER TABLE ads_earnings ALTER COLUMN telegram_id TYPE BIGINT USING telegram_id::bigint`); } catch (_) {}
         } else {
             await db.run(`CREATE TABLE IF NOT EXISTS ads_earnings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
