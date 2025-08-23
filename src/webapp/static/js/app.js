@@ -351,7 +351,23 @@ const pageLoaders = {
                 <div id="adsStatus" style="margin-top:10px;font-size:12px;opacity:0.9;"></div>
             </div>
         `;
-        // Overview fetch removed to avoid dependency on ads configuration; values remain defaults
+        // Overview fetch to render persistent counters from backend
+        (async ()=>{
+            try {
+                const ov = await apiCall(`/api/ads/overview/${userId}`);
+                const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+                const daily = Math.max(0, ov.dailyCompleted || 0);
+                const hour = Math.max(0, ov.hourlyCompleted || 0);
+                set('adsDailyCount', daily);
+                set('adsHourlyCount', hour);
+                set('adsLifetimeCount', Math.max(0, ov.lifetimeCompleted || 0));
+                set('adsTotalEarnings', Math.max(0, ov.totalEarnings || 0));
+                const dbar = document.getElementById('adsDailyBar'); if (dbar) dbar.style.width = `${Math.min(100, Math.round((daily/(ov.dailyLimit||60))*100))}%`;
+                const hbar = document.getElementById('adsHourlyBar'); if (hbar) hbar.style.width = `${Math.min(100, Math.round((hour/(ov.hourlyLimit||20))*100))}%`;
+                const dlimEl = document.getElementById('adsDailyLimit'); if (dlimEl) dlimEl.textContent = `Limit: ${(ov.dailyLimit||60)} tasks/day`;
+                const hlimEl = document.getElementById('adsHourlyLimit'); if (hlimEl) hlimEl.textContent = `Limit: ${(ov.hourlyLimit||20)} tasks/hour`;
+            } catch(_) { /* ignore */ }
+        })();
         // Preload ad to reduce delay
         (async () => { try { await waitForMonetagSdk(); if (typeof window.show_9758957==='function') await window.show_9758957({ type:'preload', ymid: String(userId) }); } catch(_){} })();
         // Direct start handler using SDK with ymid + requestVar
@@ -363,6 +379,11 @@ const pageLoaders = {
                 if (status) status.textContent = 'Starting…';
                 btn.disabled = true;
                 try {
+                    // 15s cooldown enforcement
+                    const now = Date.now();
+                    const last = Number(localStorage.getItem('adsLastStartTs') || '0');
+                    if (now - last < 15000) throw new Error('Please wait 15 seconds before trying again');
+                    localStorage.setItem('adsLastStartTs', String(now));
                     await waitForMonetagSdk();
                     if (typeof window.show_9758957 !== 'function') throw new Error('SDK not loaded');
                     try {
@@ -389,6 +410,11 @@ const pageLoaders = {
                             };
                             inc(d, 'adsDailyBar', dl);
                             inc(h, 'adsHourlyBar', hl);
+                            // Lifetime counters and total earnings will refresh on next page open; persist partials so returning is consistent
+                            try {
+                                const life = document.getElementById('adsLifetimeCount');
+                                if (life) { const v = parseInt(life.textContent.replace(/\D+/g,'')) || 0; life.textContent = String(v + 1); }
+                            } catch(_) {}
                         }
                     } catch (_) { /* ignore */ }
                     if (status) status.textContent = '';

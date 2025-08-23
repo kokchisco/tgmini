@@ -1678,7 +1678,7 @@ app.post('/api/ads/complete', async (req, res) => {
             if (!u) throw new Error('User not found');
             await tx.run(`UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ?, updated_at = datetime('now') WHERE id = ?`, [points, points, u.id]);
             await tx.run(`INSERT INTO ads_earnings (telegram_id, provider, provider_txid, click_id, points_earned, revenue_amount) VALUES (?, 'client', NULL, NULL, ?, NULL)`, [tgId, points]);
-            await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at) VALUES (?, ?, datetime('now'))`, [tgId, points]);
+            await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at, source) VALUES (?, ?, datetime('now'), 'ads')`, [tgId, points]);
         });
         try { await sendTelegramMessage(tgId, `🎯 Ads task completed. You earned +${points} points.`); } catch (_) {}
         res.json({ success: true, pointsAwarded: points });
@@ -1741,8 +1741,8 @@ app.all('/postback', async (req, res) => {
             if (!u) throw new Error('User not found');
             await tx.run(`UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ?, updated_at = datetime('now') WHERE id = ?`, [points, points, u.id]);
             await tx.run(`INSERT INTO ads_earnings (telegram_id, provider, provider_txid, click_id, points_earned, revenue_amount) VALUES (?, 'monetag', ?, ?, ?, ?)`, [tgId, ymid || null, zoneId || null, points, revenue || null]);
-            // log for earnings history UI as generic earnings
-            await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at) VALUES (?, ?, datetime('now'))`, [tgId, points]);
+            // log for earnings history UI as Ads Reward
+            await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at, source) VALUES (?, ?, datetime('now'), 'ads')`, [tgId, points]);
         });
         try { await sendTelegramMessage(tgId, `🎯 Ads task completed. You earned +${points} points.`); } catch(_) {}
         res.send('OK');
