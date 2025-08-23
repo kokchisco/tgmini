@@ -97,6 +97,7 @@ const router = {
         '/ads': 'ads',
         '/earn': 'earn',
         '/tasks': 'tasks',
+        '/history': 'history',
         '/profile': 'profile',
         '/withdraw': 'withdraw',
         '/bank': 'bank',
@@ -1975,6 +1976,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (href && href !== '#') {
                 router.navigate(href);
             }
+        }
+    });
+
+    // Intercept internal links (e.g., quick links like /history) to use SPA routing
+    document.addEventListener('click', (e) => {
+        const anchor = e.target.closest('a[href]');
+        if (!anchor) return;
+        const href = anchor.getAttribute('href');
+        if (!href || href === '#' || anchor.target === '_blank') return;
+        // Only handle app routes starting with '/'
+        if (href.startsWith('/')) {
+            try {
+                const path = new URL(href, window.location.origin).pathname;
+                if (router.routes[path]) {
+                    e.preventDefault();
+                    router.navigate(path);
+                }
+            } catch (_) { /* ignore */ }
         }
     });
 });
