@@ -351,29 +351,7 @@ const pageLoaders = {
                 <div id="adsStatus" style="margin-top:10px;font-size:12px;opacity:0.9;"></div>
             </div>
         `;
-        // Load overview (non-blocking)
-        (async () => {
-            let ov = null;
-            try { ov = await apiCall(`/api/ads/overview/${userId}`); } catch(_) { ov = null; }
-            try {
-                if (ov && ov.enabled === false) { const w = document.getElementById('adsCfgWarn'); if (w) w.style.display = 'block'; }
-                const daily = Math.max(0, (ov && ov.dailyCompleted) || 0);
-                const dlim = Math.max(1, (ov && ov.dailyLimit) || 60);
-                const hour = Math.max(0, (ov && ov.hourlyCompleted) || 0);
-                const hlim = Math.max(1, (ov && ov.hourlyLimit) || 20);
-                const life = Math.max(0, (ov && ov.lifetimeCompleted) || 0);
-                const earn = Math.max(0, (ov && ov.totalEarnings) || 0);
-                const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
-                set('adsDailyCount', daily);
-                set('adsHourlyCount', hour);
-                set('adsLifetimeCount', life);
-                set('adsTotalEarnings', earn);
-                const dbar = document.getElementById('adsDailyBar'); if (dbar) dbar.style.width = `${Math.min(100, Math.round((daily/dlim)*100))}%`;
-                const hbar = document.getElementById('adsHourlyBar'); if (hbar) hbar.style.width = `${Math.min(100, Math.round((hour/hlim)*100))}%`;
-                const dlimEl = document.getElementById('adsDailyLimit'); if (dlimEl) dlimEl.textContent = `Limit: ${dlim} tasks/day`;
-                const hlimEl = document.getElementById('adsHourlyLimit'); if (hlimEl) hlimEl.textContent = `Limit: ${hlim} tasks/hour`;
-            } catch (_) {}
-        })();
+        // Overview fetch removed to avoid dependency on ads configuration; values remain defaults
         // Direct start handler (rewarded interstitial)
         try {
             const btn = document.getElementById('adsStartBtn');
@@ -385,9 +363,12 @@ const pageLoaders = {
                 try {
                     // Prefer SDK injected in header by data-sdk show_9758957
                     if (typeof window.show_9758957 === 'function') {
-                        // Basic rewarded interstitial
-                        await window.show_9758957();
-                        // TODO: call backend to credit if needed
+                        try {
+                            await window.show_9758957();
+                        } catch (e1) {
+                            // Fallback to rewarded popup variant if interstitial fails
+                            try { await window.show_9758957('pop'); } catch (e2) { throw e2 || e1; }
+                        }
                     } else {
                         // Fallback to dynamic loader/start (legacy)
                         await startAdsFlow();

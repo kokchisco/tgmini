@@ -145,16 +145,9 @@ async function getIntConfig(db, key, fallback){
 // Monetag helpers and config
 async function getMonetagConfig(db){
     return {
-        enabled: (await getConfig(db, 'monetagEnabled', 'false')) === 'true',
-        zoneId: await getConfig(db, 'monetagZoneId', ''),
-        sdkId: await getConfig(db, 'monetagSdkId', ''),
-        token: await getConfig(db, 'monetagToken', ''),
-        // Allow overriding full postback URL if desired
-        postbackUrl: await getConfig(db, 'monetagPostbackUrl', ''),
-        fixedRewardPoints: await getIntConfig(db, 'monetagFixedRewardPoints', 0),
+        // Only limits remain configurable; SDK is included statically in the client
         hourlyLimit: await getIntConfig(db, 'adsHourlyLimit', 20),
-        dailyLimit: await getIntConfig(db, 'adsDailyLimit', 60),
-        requiredSeconds: await getIntConfig(db, 'adsRequiredSeconds', 20)
+        dailyLimit: await getIntConfig(db, 'adsDailyLimit', 60)
     };
 }
 
@@ -1254,21 +1247,14 @@ app.post('/api/admin/config/paystack', async (req, res) => {
     }
 });
 
-// Admin: Monetag config
+// Admin: Monetag config (minimal, keep only optional display limits)
 app.post('/api/admin/config/monetag', async (req, res) => {
     try {
         if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
-        const { enabled, zoneId, sdkId, token, postbackUrl, fixedRewardPoints, hourlyLimit, dailyLimit, requiredSeconds } = req.body || {};
+        const { hourlyLimit, dailyLimit } = req.body || {};
         await setConfig(req.db, {
-            monetagEnabled: enabled ? 'true' : 'false',
-            monetagZoneId: zoneId || '',
-            monetagSdkId: sdkId || '',
-            monetagToken: token || '',
-            monetagPostbackUrl: postbackUrl || '',
-            monetagFixedRewardPoints: String(parseInt(fixedRewardPoints || 0)),
             adsHourlyLimit: String(parseInt(hourlyLimit || 20)),
-            adsDailyLimit: String(parseInt(dailyLimit || 60)),
-            adsRequiredSeconds: String(parseInt(requiredSeconds || 20))
+            adsDailyLimit: String(parseInt(dailyLimit || 60))
         });
         res.json({ success: true });
     } catch (e) {
@@ -1656,7 +1642,6 @@ app.get('/api/ads/overview/:telegramId', async (req, res) => {
         const sinceDay = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [telegramId]);
         const lifetime = await req.db.get(`SELECT COUNT(*) AS c, COALESCE(SUM(points_earned),0) AS sum FROM ads_earnings WHERE telegram_id = ?`, [telegramId]);
         res.json({
-            enabled: cfg.enabled,
             hourlyCompleted: sinceHour ? sinceHour.c : 0,
             hourlyLimit: cfg.hourlyLimit,
             dailyCompleted: sinceDay ? sinceDay.c : 0,
@@ -1671,6 +1656,7 @@ app.get('/api/ads/overview/:telegramId', async (req, res) => {
 });
 
 // Ads Task: start - returns smartlink and click_id
+// Minimal start endpoint retained only for click tracking/limits
 app.post('/api/ads/start', async (req, res) => {
     try {
         const { telegramId } = req.body || {};
@@ -1678,15 +1664,13 @@ app.post('/api/ads/start', async (req, res) => {
         if (!Number.isFinite(tgId)) return res.status(400).json({ error: 'Invalid user' });
         await ensureAdsTables(req.db);
         const cfg = await getMonetagConfig(req.db);
-        if (!cfg.enabled || !cfg.zoneId) return res.status(400).json({ error: 'Ads not available' });
-        // enforce limits
         const hourCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= datetime('now', '-1 hour')`, [tgId]);
         const dayCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [tgId]);
         if ((hourCnt?.c || 0) >= cfg.hourlyLimit) return res.status(429).json({ error: 'Hourly limit reached' });
         if ((dayCnt?.c || 0) >= cfg.dailyLimit) return res.status(429).json({ error: 'Daily limit reached' });
         const clickId = `ad_${tgId}_${Date.now()}`;
         await req.db.run(`INSERT INTO ads_clicks (telegram_id, provider, click_id) VALUES (?, 'monetag', ?)`, [tgId, clickId]);
-        res.json({ success: true, zoneId: cfg.zoneId, sdkId: cfg.sdkId, clickId, requiredSeconds: cfg.requiredSeconds });
+        res.json({ success: true });
     } catch (e) {
         console.error('ads start error', e);
         res.status(500).json({ error: 'Ads service error', details: (e && e.message) ? e.message : 'unknown' });
