@@ -315,17 +315,33 @@ const pageLoaders = {
 
     // Ads entry (footer): open the Monetag modal directly
     async loadAdsEntry() {
-        try { openAdsTaskModal(); } catch(_) {}
-        // Keep the current page selected visually
+        // Render a simple page with a single action to trigger the ads task directly (no modal)
         const mainContent = document.getElementById('main-content');
         mainContent.innerHTML = `
             <div class="page-title">Ads</div>
             <div class="card" style="text-align:center; padding:24px 16px;">
-                <p>Ads task dialog opened. If blocked, tap the Ads button again.</p>
+                <p>Tap the button below to start the ads task.</p>
                 <a href="#" id="adsOpenBtn" class="btn btn-primary" style="margin-top:12px;">Open Ads Task</a>
+                <div id="adsStatus" style="margin-top:10px;font-size:12px;opacity:0.9;"></div>
             </div>
         `;
-        try { document.getElementById('adsOpenBtn')?.addEventListener('click', (e)=>{ e.preventDefault(); openAdsTaskModal(); }); } catch(_) {}
+        try {
+            const btn = document.getElementById('adsOpenBtn');
+            const status = document.getElementById('adsStatus');
+            if (btn) btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                if (status) status.textContent = 'Starting…';
+                btn.disabled = true;
+                try {
+                    await startAdsFlow();
+                    if (status) status.textContent = '';
+                } catch (err) {
+                    if (status) status.textContent = err && err.message ? err.message : 'Failed to start ads task';
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        } catch(_) {}
     },
 
     async loadEarnPage() {
@@ -1891,7 +1907,7 @@ async function openAdsTaskModal(){
                 if (!document.getElementById('monetagSdkScript')) {
                     const scr = document.createElement('script');
                     scr.id = 'monetagSdkScript';
-                    scr.src = '//libtl.com/sdk.js';
+                    scr.src = 'https://libtl.com/sdk.js';
                     scr.setAttribute('data-zone', String(zone));
                     scr.setAttribute('data-sdk', String(sdkId));
                     document.head.appendChild(scr);
@@ -1907,6 +1923,25 @@ async function openAdsTaskModal(){
     });
 }
 window.openAdsTaskModal = openAdsTaskModal;
+
+// Direct-start Ads flow (no modal)
+async function startAdsFlow(){
+    const s = await apiCall('/api/ads/start', { method: 'POST', body: JSON.stringify({ telegramId: userId }) });
+    const zone = s.zoneId;
+    const sdkId = s.sdkId || `show_${zone}`;
+    if (!zone) throw new Error('Ads not available');
+    if (!document.getElementById('monetagSdkScript')) {
+        const scr = document.createElement('script');
+        scr.id = 'monetagSdkScript';
+        scr.src = 'https://libtl.com/sdk.js';
+        scr.setAttribute('data-zone', String(zone));
+        scr.setAttribute('data-sdk', String(sdkId));
+        document.head.appendChild(scr);
+        scr.onload = () => { try { if (window[sdkId]) window[sdkId](); } catch(_) {} };
+    } else {
+        try { if (window[sdkId]) window[sdkId](); } catch(_) {}
+    }
+}
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
