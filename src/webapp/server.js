@@ -26,9 +26,9 @@ app.use(helmet({
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com", "data:"],
             scriptSrc: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com"],
             scriptSrcElem: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com"],
-            connectSrc: ["'self'", "https://api.telegram.org", "https://api.iconify.design", "https://code.iconify.design"],
+            connectSrc: ["'self'", "https://api.telegram.org", "https://api.iconify.design", "https://code.iconify.design", "https://libtl.com"],
             imgSrc: ["'self'", "data:", "https:"],
-            frameSrc: ["'self'", "https://telegram.org"]
+            frameSrc: ["'self'", "https://telegram.org", "https://libtl.com"]
         }
     }
 }));
@@ -1685,7 +1685,7 @@ app.post('/api/ads/start', async (req, res) => {
         res.json({ success: true, zoneId: cfg.zoneId, sdkId: cfg.sdkId, clickId, requiredSeconds: cfg.requiredSeconds });
     } catch (e) {
         console.error('ads start error', e);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Ads service error', details: (e && e.message) ? e.message : 'unknown' });
     }
 });
 
