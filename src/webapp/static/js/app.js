@@ -315,18 +315,68 @@ const pageLoaders = {
 
     // Ads entry (footer): open the Monetag modal directly
     async loadAdsEntry() {
-        // Render a simple page with a single action to trigger the ads task directly (no modal)
+        // Render overview cards + direct start button (no modal)
         const mainContent = document.getElementById('main-content');
         mainContent.innerHTML = `
-            <div class="page-title">Ads</div>
-            <div class="card" style="text-align:center; padding:24px 16px;">
-                <p>Tap the button below to start the ads task.</p>
-                <a href="#" id="adsOpenBtn" class="btn btn-primary" style="margin-top:12px;">Open Ads Task</a>
+            <div class="page-title">Ads Task Overview</div>
+            <div class="card" style="padding:16px;">
+                <div id="adsCfgWarn" style="display:none;margin-bottom:12px;" class="error">Ads are not configured yet.</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:12px;padding:16px;">
+                        <div style="opacity:0.85;font-size:14px;">Daily Tasks Completed</div>
+                        <div id="adsDailyCount" style="font-size:24px;font-weight:700;">0</div>
+                        <div style="height:6px;border-radius:6px;background:#e9ecef;margin:8px 0;position:relative;">
+                            <div id="adsDailyBar" style="height:6px;border-radius:6px;background:#fbbf24;width:0;"></div>
+                        </div>
+                        <div id="adsDailyLimit" style="opacity:0.7;font-size:12px;">Limit: 60 tasks/day</div>
+                    </div>
+                    <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:12px;padding:16px;">
+                        <div style="opacity:0.85;font-size:14px;">Hourly Tasks Completed</div>
+                        <div id="adsHourlyCount" style="font-size:24px;font-weight:700;">0</div>
+                        <div style="height:6px;border-radius:6px;background:#e9ecef;margin:8px 0;position:relative;">
+                            <div id="adsHourlyBar" style="height:6px;border-radius:6px;background:#fbbf24;width:0;"></div>
+                        </div>
+                        <div id="adsHourlyLimit" style="opacity:0.7;font-size:12px;">Limit: 20 tasks/hour</div>
+                    </div>
+                    <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:12px;padding:16px;">
+                        <div style="opacity:0.85;font-size:14px;">Lifetime Completed Tasks</div>
+                        <div id="adsLifetimeCount" style="font-size:24px;font-weight:700;">0</div>
+                    </div>
+                    <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:12px;padding:16px;">
+                        <div style="opacity:0.85;font-size:14px;">Total Earnings</div>
+                        <div id="adsTotalEarnings" style="font-size:24px;font-weight:700;">0</div>
+                    </div>
+                </div>
+                <a href="#" id="adsStartBtn" class="btn btn-primary" style="display:block;margin-top:16px;width:100%;">Start Task</a>
                 <div id="adsStatus" style="margin-top:10px;font-size:12px;opacity:0.9;"></div>
             </div>
         `;
+        // Load overview (non-blocking)
+        (async () => {
+            let ov = null;
+            try { ov = await apiCall(`/api/ads/overview/${userId}`); } catch(_) { ov = null; }
+            try {
+                if (ov && ov.enabled === false) { const w = document.getElementById('adsCfgWarn'); if (w) w.style.display = 'block'; }
+                const daily = Math.max(0, (ov && ov.dailyCompleted) || 0);
+                const dlim = Math.max(1, (ov && ov.dailyLimit) || 60);
+                const hour = Math.max(0, (ov && ov.hourlyCompleted) || 0);
+                const hlim = Math.max(1, (ov && ov.hourlyLimit) || 20);
+                const life = Math.max(0, (ov && ov.lifetimeCompleted) || 0);
+                const earn = Math.max(0, (ov && ov.totalEarnings) || 0);
+                const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+                set('adsDailyCount', daily);
+                set('adsHourlyCount', hour);
+                set('adsLifetimeCount', life);
+                set('adsTotalEarnings', earn);
+                const dbar = document.getElementById('adsDailyBar'); if (dbar) dbar.style.width = `${Math.min(100, Math.round((daily/dlim)*100))}%`;
+                const hbar = document.getElementById('adsHourlyBar'); if (hbar) hbar.style.width = `${Math.min(100, Math.round((hour/hlim)*100))}%`;
+                const dlimEl = document.getElementById('adsDailyLimit'); if (dlimEl) dlimEl.textContent = `Limit: ${dlim} tasks/day`;
+                const hlimEl = document.getElementById('adsHourlyLimit'); if (hlimEl) hlimEl.textContent = `Limit: ${hlim} tasks/hour`;
+            } catch (_) {}
+        })();
+        // Direct start handler
         try {
-            const btn = document.getElementById('adsOpenBtn');
+            const btn = document.getElementById('adsStartBtn');
             const status = document.getElementById('adsStatus');
             if (btn) btn.addEventListener('click', async (e) => {
                 e.preventDefault();
