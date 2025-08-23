@@ -149,6 +149,8 @@ async function getMonetagConfig(db){
         zoneId: await getConfig(db, 'monetagZoneId', ''),
         sdkId: await getConfig(db, 'monetagSdkId', ''),
         token: await getConfig(db, 'monetagToken', ''),
+        // Allow overriding full postback URL if desired
+        postbackUrl: await getConfig(db, 'monetagPostbackUrl', ''),
         fixedRewardPoints: await getIntConfig(db, 'monetagFixedRewardPoints', 0),
         hourlyLimit: await getIntConfig(db, 'adsHourlyLimit', 20),
         dailyLimit: await getIntConfig(db, 'adsDailyLimit', 60),
@@ -1227,12 +1229,13 @@ app.post('/api/admin/config/paystack', async (req, res) => {
 app.post('/api/admin/config/monetag', async (req, res) => {
     try {
         if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
-        const { enabled, zoneId, sdkId, token, fixedRewardPoints, hourlyLimit, dailyLimit, requiredSeconds } = req.body || {};
+        const { enabled, zoneId, sdkId, token, postbackUrl, fixedRewardPoints, hourlyLimit, dailyLimit, requiredSeconds } = req.body || {};
         await setConfig(req.db, {
             monetagEnabled: enabled ? 'true' : 'false',
             monetagZoneId: zoneId || '',
             monetagSdkId: sdkId || '',
             monetagToken: token || '',
+            monetagPostbackUrl: postbackUrl || '',
             monetagFixedRewardPoints: String(parseInt(fixedRewardPoints || 0)),
             adsHourlyLimit: String(parseInt(hourlyLimit || 20)),
             adsDailyLimit: String(parseInt(dailyLimit || 60)),

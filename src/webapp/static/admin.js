@@ -240,6 +240,7 @@ const loadConfiguration = async () => {
         if (document.getElementById('monetagZoneId')) document.getElementById('monetagZoneId').value = mc.zoneId || '';
         if (document.getElementById('monetagSdkId')) document.getElementById('monetagSdkId').value = mc.sdkId || '';
         if (document.getElementById('monetagToken')) document.getElementById('monetagToken').value = mc.token || '';
+        if (document.getElementById('monetagPostbackUrl')) document.getElementById('monetagPostbackUrl').value = mc.postbackUrl || '';
         if (document.getElementById('monetagFixedRewardPoints')) document.getElementById('monetagFixedRewardPoints').value = mc.fixedRewardPoints || 0;
         if (document.getElementById('adsHourlyLimit')) document.getElementById('adsHourlyLimit').value = mc.hourlyLimit || 20;
         if (document.getElementById('adsDailyLimit')) document.getElementById('adsDailyLimit').value = mc.dailyLimit || 60;
@@ -594,6 +595,10 @@ const switchTab = (tabName) => {
         case 'social':
             loadSocialTasks();
             break;
+        case 'ads':
+            // Reuse configuration loader to populate Monetag fields
+            loadConfiguration();
+            break;
         case 'moderation':
             // no initial load
             break;
@@ -755,6 +760,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 zoneId: document.getElementById('monetagZoneId')?.value || '',
                 sdkId: document.getElementById('monetagSdkId')?.value || '',
                 token: document.getElementById('monetagToken')?.value || '',
+                postbackUrl: document.getElementById('monetagPostbackUrl')?.value || '',
                 fixedRewardPoints: parseInt(document.getElementById('monetagFixedRewardPoints')?.value || '0'),
                 hourlyLimit: parseInt(document.getElementById('adsHourlyLimit')?.value || '20'),
                 dailyLimit: parseInt(document.getElementById('adsDailyLimit')?.value || '60'),

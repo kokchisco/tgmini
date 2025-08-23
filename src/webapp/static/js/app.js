@@ -94,9 +94,9 @@ const router = {
     routes: {
         '/': 'home',
         '/home': 'home',
-        '/tasks': 'tasks',
+        '/ads': 'ads',
         '/earn': 'earn',
-        '/history': 'history',
+        '/tasks': 'tasks',
         '/profile': 'profile',
         '/withdraw': 'withdraw',
         '/bank': 'bank',
@@ -139,11 +139,14 @@ const router = {
             case 'home':
                 this.loadHomePage();
                 break;
-            case 'tasks':
-                this.loadTasksPage();
+            case 'ads':
+                this.loadAdsEntry();
                 break;
             case 'earn':
                 this.loadEarnPage();
+                break;
+            case 'tasks':
+                this.loadTasksPage();
                 break;
             case 'history':
                 this.loadHistoryPage();
@@ -237,17 +240,17 @@ const pageLoaders = {
                 <div class="card">
                     <h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Quick Actions</h3>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                        <a href="/withdraw" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(78,205,196,0.15); border:1px solid rgba(78,205,196,0.35); border-radius:12px;">
+                        <a href="/withdraw" class="btn" style="text-align:center; padding:14px; color:#111; background: rgba(78,205,196,0.18); border:1px solid rgba(78,205,196,0.45); border-radius:12px;">
                             Withdraw
                         </a>
-                        <a href="/advertise" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(118,75,162,0.18); border:1px solid rgba(118,75,162,0.4); border-radius:12px;">
+                        <a href="/advertise" class="btn" style="text-align:center; padding:14px; color:#111; background: rgba(118,75,162,0.18); border:1px solid rgba(118,75,162,0.4); border-radius:12px;">
                             Advertise
                         </a>
-                        <a href="/bank" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(102,126,234,0.18); border:1px solid rgba(102,126,234,0.45); border-radius:12px;">
+                        <a href="/bank" class="btn" style="text-align:center; padding:14px; color:#111; background: rgba(102,126,234,0.18); border:1px solid rgba(102,126,234,0.45); border-radius:12px;">
                             Bank
                         </a>
-                        <a href="#" id="adsTaskBtn" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(255,107,107,0.18); border:1px solid rgba(255,107,107,0.45); border-radius:12px;">
-                            Ads
+                        <a href="/history" class="btn" style="text-align:center; padding:14px; color:#111; background: rgba(255,107,107,0.18); border:1px solid rgba(255,107,107,0.45); border-radius:12px;">
+                            History
                         </a>
                     </div>
                 </div>
@@ -264,7 +267,7 @@ const pageLoaders = {
             `;
             
             mainContent.innerHTML = html;
-            try { document.getElementById('adsTaskBtn')?.addEventListener('click', (e)=>{ e.preventDefault(); openAdsTaskModal(); }); } catch(_) {}
+            // No special handler needed for quick link replacements
             await loadLeaderboard();
         } catch (error) {
             mainContent.innerHTML = showError('Failed to load home page');
@@ -307,6 +310,21 @@ const pageLoaders = {
         });
 
         await loadTasks('telegram');
+    },
+
+    // Ads entry (footer): open the Monetag modal directly
+    async loadAdsEntry() {
+        try { openAdsTaskModal(); } catch(_) {}
+        // Keep the current page selected visually
+        const mainContent = document.getElementById('main-content');
+        mainContent.innerHTML = `
+            <div class="page-title">Ads</div>
+            <div class="card" style="text-align:center; padding:24px 16px;">
+                <p>Ads task dialog opened. If blocked, tap the Ads button again.</p>
+                <a href="#" id="adsOpenBtn" class="btn btn-primary" style="margin-top:12px;">Open Ads Task</a>
+            </div>
+        `;
+        try { document.getElementById('adsOpenBtn')?.addEventListener('click', (e)=>{ e.preventDefault(); openAdsTaskModal(); }); } catch(_) {}
     },
 
     async loadEarnPage() {
