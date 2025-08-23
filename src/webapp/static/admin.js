@@ -237,13 +237,14 @@ const loadConfiguration = async () => {
         // Monetag config
         const mc = data.monetagConfig || {};
         if (document.getElementById('monetagEnabled')) document.getElementById('monetagEnabled').checked = !!mc.enabled;
-        if (document.getElementById('monetagSmartlink')) document.getElementById('monetagSmartlink').value = mc.smartlink || '';
+        if (document.getElementById('monetagZoneId')) document.getElementById('monetagZoneId').value = mc.zoneId || '';
+        if (document.getElementById('monetagSdkId')) document.getElementById('monetagSdkId').value = mc.sdkId || '';
         if (document.getElementById('monetagToken')) document.getElementById('monetagToken').value = mc.token || '';
         if (document.getElementById('monetagFixedRewardPoints')) document.getElementById('monetagFixedRewardPoints').value = mc.fixedRewardPoints || 0;
         if (document.getElementById('adsHourlyLimit')) document.getElementById('adsHourlyLimit').value = mc.hourlyLimit || 20;
         if (document.getElementById('adsDailyLimit')) document.getElementById('adsDailyLimit').value = mc.dailyLimit || 60;
         if (document.getElementById('adsRequiredSeconds')) document.getElementById('adsRequiredSeconds').value = mc.requiredSeconds || 20;
-        try { const token = mc.token || ''; const base = window.location.origin; document.getElementById('monetagPostbackUrl').value = `${base}/api/monetag/postback?token=${encodeURIComponent(token)}&sub1={telegramId}&sub2={clickId}&revenue={revenue}&txid={txid}`; } catch(_) {}
+        try { const token = mc.token || ''; const base = window.location.origin; document.getElementById('monetagPostbackUrl').value = `${base}/postback?token=${encodeURIComponent(token)}&telegram_id={telegram_id}&zone_id={zone_id}&event_type={event_type}&reward_event_type={reward_event_type}&estimated_price={estimated_price}&ymid={ymid}`; } catch(_) {}
         if (document.getElementById('appName')) document.getElementById('appName').value = (data.appConfig && data.appConfig.appName) || 'TGTask';
     } catch (error) {
         console.error('Error loading configuration:', error);
@@ -741,7 +742,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const base = window.location.origin;
             const token = document.getElementById('monetagToken')?.value || '';
-            const url = `${base}/api/monetag/postback?token=${encodeURIComponent(token)}&sub1={telegramId}&sub2={clickId}&revenue={revenue}&txid={txid}`;
+            const url = `${base}/postback?token=${encodeURIComponent(token)}&telegram_id={telegram_id}&zone_id={zone_id}&event_type={event_type}&reward_event_type={reward_event_type}&estimated_price={estimated_price}&ymid={ymid}`;
             const el = document.getElementById('monetagPostbackUrl');
             if (el) el.value = url;
         } catch(_) {}
@@ -751,7 +752,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             e.preventDefault();
             const payload = {
                 enabled: !!document.getElementById('monetagEnabled')?.checked,
-                smartlink: document.getElementById('monetagSmartlink')?.value || '',
+                zoneId: document.getElementById('monetagZoneId')?.value || '',
+                sdkId: document.getElementById('monetagSdkId')?.value || '',
                 token: document.getElementById('monetagToken')?.value || '',
                 fixedRewardPoints: parseInt(document.getElementById('monetagFixedRewardPoints')?.value || '0'),
                 hourlyLimit: parseInt(document.getElementById('adsHourlyLimit')?.value || '20'),

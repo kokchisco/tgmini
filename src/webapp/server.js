@@ -146,7 +146,8 @@ async function getIntConfig(db, key, fallback){
 async function getMonetagConfig(db){
     return {
         enabled: (await getConfig(db, 'monetagEnabled', 'false')) === 'true',
-        smartlink: await getConfig(db, 'monetagSmartlink', ''),
+        zoneId: await getConfig(db, 'monetagZoneId', ''),
+        sdkId: await getConfig(db, 'monetagSdkId', ''),
         token: await getConfig(db, 'monetagToken', ''),
         fixedRewardPoints: await getIntConfig(db, 'monetagFixedRewardPoints', 0),
         hourlyLimit: await getIntConfig(db, 'adsHourlyLimit', 20),
@@ -1226,10 +1227,11 @@ app.post('/api/admin/config/paystack', async (req, res) => {
 app.post('/api/admin/config/monetag', async (req, res) => {
     try {
         if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
-        const { enabled, smartlink, token, fixedRewardPoints, hourlyLimit, dailyLimit, requiredSeconds } = req.body || {};
+        const { enabled, zoneId, sdkId, token, fixedRewardPoints, hourlyLimit, dailyLimit, requiredSeconds } = req.body || {};
         await setConfig(req.db, {
             monetagEnabled: enabled ? 'true' : 'false',
-            monetagSmartlink: smartlink || '',
+            monetagZoneId: zoneId || '',
+            monetagSdkId: sdkId || '',
             monetagToken: token || '',
             monetagFixedRewardPoints: String(parseInt(fixedRewardPoints || 0)),
             adsHourlyLimit: String(parseInt(hourlyLimit || 20)),
@@ -1644,7 +1646,7 @@ app.post('/api/ads/start', async (req, res) => {
         if (!Number.isFinite(tgId)) return res.status(400).json({ error: 'Invalid user' });
         await ensureAdsTables(req.db);
         const cfg = await getMonetagConfig(req.db);
-        if (!cfg.enabled || !cfg.smartlink) return res.status(400).json({ error: 'Ads not available' });
+        if (!cfg.enabled || !cfg.zoneId) return res.status(400).json({ error: 'Ads not available' });
         // enforce limits
         const hourCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= datetime('now', '-1 hour')`, [tgId]);
         const dayCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [tgId]);
@@ -1652,11 +1654,7 @@ app.post('/api/ads/start', async (req, res) => {
         if ((dayCnt?.c || 0) >= cfg.dailyLimit) return res.status(429).json({ error: 'Daily limit reached' });
         const clickId = `ad_${tgId}_${Date.now()}`;
         await req.db.run(`INSERT INTO ads_clicks (telegram_id, provider, click_id) VALUES (?, 'monetag', ?)`, [tgId, clickId]);
-        // Smartlink with subid for postback
-        const url = new URL(cfg.smartlink);
-        url.searchParams.set('sub1', String(tgId));
-        url.searchParams.set('sub2', clickId);
-        res.json({ success: true, smartlink: url.toString(), clickId, requiredSeconds: cfg.requiredSeconds });
+        res.json({ success: true, zoneId: cfg.zoneId, sdkId: cfg.sdkId, clickId, requiredSeconds: cfg.requiredSeconds });
     } catch (e) {
         console.error('ads start error', e);
         res.status(500).json({ error: 'Internal server error' });
@@ -1664,50 +1662,43 @@ app.post('/api/ads/start', async (req, res) => {
 });
 
 // Monetag S2S Postback endpoint (configure this on Monetag)
-// Example: GET /api/monetag/postback?token=XXX&sub1={telegramId}&sub2={clickId}&revenue=0.05&txid=abc
-app.all('/api/monetag/postback', async (req, res) => {
+// Example (SDK macros): GET /postback?token=XXX&telegram_id={telegram_id}&zone_id={zone_id}&event_type={event_type}&reward_event_type={reward_event_type}&estimated_price={estimated_price}&ymid={ymid}
+app.all('/postback', async (req, res) => {
     try {
         await ensureAdsTables(req.db);
         const cfg = await getMonetagConfig(req.db);
         const q = req.method === 'POST' ? (req.body || {}) : (req.query || {});
         const token = String(q.token || '');
-        if (!cfg.token || token !== cfg.token) return res.status(403).json({ error: 'Bad token' });
-        const tgId = parseInt(q.sub1 || q.telegramId || q.uid);
-        const clickId = String(q.sub2 || q.click_id || '');
-        const txid = String(q.txid || q.transaction_id || q.conv || '');
-        const revenue = parseFloat(q.revenue || q.payout || 0) || 0;
-        if (!Number.isFinite(tgId) || !clickId) return res.status(400).json({ error: 'Missing params' });
-        // Required dwell time since click
-        if (cfg.requiredSeconds > 0) {
-            const row = await req.db.get(`SELECT created_at FROM ads_clicks WHERE click_id = ?`, [clickId]);
-            if (!row) return res.status(400).json({ error: 'Unknown clickId' });
-            const clickedAt = new Date(row.created_at + 'Z').getTime();
-            if (isFinite(clickedAt)) {
-                const diffSec = Math.floor((Date.now() - clickedAt) / 1000);
-                if (diffSec < cfg.requiredSeconds) return res.status(200).json({ ok: true, ignored: true, reason: 'dwell_time' });
-            }
-        }
-        // Enforce per-user limits
+        if (!cfg.token || token !== cfg.token) return res.status(403).send('BAD_TOKEN');
+        const tgId = parseInt(q.telegram_id || q.sub1 || q.uid);
+        const zoneId = String(q.zone_id || cfg.zoneId || '');
+        const eventType = String(q.event_type || '');
+        const rewardYes = String(q.reward_event_type || '').toLowerCase() === 'yes';
+        const revenue = parseFloat(q.estimated_price || q.revenue || 0) || 0;
+        const ymid = String(q.ymid || '');
+        if (!Number.isFinite(tgId)) return res.status(400).send('BAD_USER');
+        // Optional: rate limits still apply
         const hourCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= datetime('now', '-1 hour')`, [tgId]);
         const dayCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [tgId]);
-        if ((hourCnt?.c || 0) >= cfg.hourlyLimit) return res.status(200).json({ ok: true, ignored: true, reason: 'hourly_limit' });
-        if ((dayCnt?.c || 0) >= cfg.dailyLimit) return res.status(200).json({ ok: true, ignored: true, reason: 'daily_limit' });
-        // Determine reward points
+        if ((hourCnt?.c || 0) >= cfg.hourlyLimit) return res.status(200).send('HOURLY_LIMIT');
+        if ((dayCnt?.c || 0) >= cfg.dailyLimit) return res.status(200).send('DAILY_LIMIT');
+        if (!rewardYes) return res.status(200).send('IGNORED');
+        // Enforce per-user limits
         const points = cfg.fixedRewardPoints > 0 ? cfg.fixedRewardPoints : Math.max(1, Math.round(revenue * 100));
         await req.db.transaction(async (tx) => {
             // credit points
             const u = await tx.get('SELECT id FROM users WHERE telegram_id = ?', [tgId]);
             if (!u) throw new Error('User not found');
             await tx.run(`UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ?, updated_at = datetime('now') WHERE id = ?`, [points, points, u.id]);
-            await tx.run(`INSERT INTO ads_earnings (telegram_id, provider, provider_txid, click_id, points_earned, revenue_amount) VALUES (?, 'monetag', ?, ?, ?, ?)`, [tgId, txid || null, clickId || null, points, revenue || null]);
+            await tx.run(`INSERT INTO ads_earnings (telegram_id, provider, provider_txid, click_id, points_earned, revenue_amount) VALUES (?, 'monetag', ?, ?, ?, ?)`, [tgId, ymid || null, zoneId || null, points, revenue || null]);
             // log for earnings history UI as generic earnings
             await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at) VALUES (?, ?, datetime('now'))`, [tgId, points]);
         });
         try { await sendTelegramMessage(tgId, `🎯 Ads task completed. You earned +${points} points.`); } catch(_) {}
-        res.json({ ok: true, credited: points });
+        res.send('OK');
     } catch (e) {
         console.error('monetag postback error', e);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).send('ERROR');
     }
 });
 // Bot verification endpoints

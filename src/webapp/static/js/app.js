@@ -236,24 +236,20 @@ const pageLoaders = {
 
                 <div class="card">
                     <h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Quick Actions</h3>
-                                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
-                         <a href="/withdraw" class="btn btn-primary" style="text-align: center; padding: 16px 8px;">
-                             <span class="iconify" data-icon="mdi:bank-transfer"></span>
-                             <div style="font-size: 12px; margin-top: 4px;">Withdraw</div>
-                         </a>
-                         <a href="/advertise" class="btn btn-secondary" style="text-align: center; padding: 16px 8px;">
-                             <span class="iconify" data-icon="mdi:bullhorn-outline"></span>
-                             <div style="font-size: 12px; margin-top: 4px;">Advertise</div>
-                         </a>
-                         <a href="/bank" class="btn btn-secondary" style="text-align: center; padding: 16px 8px;">
-                             <span class="iconify" data-icon="mdi:bank-outline"></span>
-                             <div style="font-size: 12px; margin-top: 4px;">Bank</div>
-                         </a>
-                         <a href="#" id="adsTaskBtn" class="btn btn-secondary" style="text-align: center; padding: 16px 8px;">
-                             <span class="iconify" data-icon="mdi:magnet"></span>
-                             <div style="font-size: 12px; margin-top: 4px;">Ads</div>
-                         </a>
-                     </div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                        <a href="/withdraw" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(78,205,196,0.15); border:1px solid rgba(78,205,196,0.35); border-radius:12px;">
+                            Withdraw
+                        </a>
+                        <a href="/advertise" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(118,75,162,0.18); border:1px solid rgba(118,75,162,0.4); border-radius:12px;">
+                            Advertise
+                        </a>
+                        <a href="/bank" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(102,126,234,0.18); border:1px solid rgba(102,126,234,0.45); border-radius:12px;">
+                            Bank
+                        </a>
+                        <a href="#" id="adsTaskBtn" class="btn" style="text-align:center; padding:14px; color:#fff; background: rgba(255,107,107,0.18); border:1px solid rgba(255,107,107,0.45); border-radius:12px;">
+                            Ads
+                        </a>
+                    </div>
                 </div>
 
                 <div class="card">
@@ -1863,10 +1859,21 @@ async function openAdsTaskModal(){
         document.getElementById('adsStartBtn').addEventListener('click', async ()=>{
             try {
                 const s = await apiCall('/api/ads/start', { method: 'POST', body: JSON.stringify({ telegramId: userId }) });
-                if (s && s.smartlink) {
-                    // open smartlink in Telegram or new tab
-                    try { if (window.Telegram?.WebApp?.openTelegramLink) return window.Telegram.WebApp.openTelegramLink(s.smartlink); } catch(_) {}
-                    window.open(s.smartlink, '_blank');
+                // Inject SDK and call function
+                const zone = s.zoneId;
+                const sdkId = s.sdkId || `show_${zone}`;
+                if (zone) {
+                    if (!document.getElementById('monetagSdkScript')) {
+                        const scr = document.createElement('script');
+                        scr.id = 'monetagSdkScript';
+                        scr.src = '//libtl.com/sdk.js';
+                        scr.setAttribute('data-zone', String(zone));
+                        scr.setAttribute('data-sdk', String(sdkId));
+                        document.head.appendChild(scr);
+                        scr.onload = () => { try { if (window[sdkId]) window[sdkId](); } catch(_) {} };
+                    } else {
+                        try { if (window[sdkId]) window[sdkId](); } catch(_) {}
+                    }
                 }
                 modal.remove();
             } catch (err) {
