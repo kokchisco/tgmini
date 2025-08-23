@@ -239,6 +239,9 @@ const loadConfiguration = async () => {
         if (document.getElementById('adsHourlyLimit')) document.getElementById('adsHourlyLimit').value = mc.hourlyLimit || 20;
         if (document.getElementById('adsDailyLimit')) document.getElementById('adsDailyLimit').value = mc.dailyLimit || 60;
         if (document.getElementById('adsFixedRewardPoints')) document.getElementById('adsFixedRewardPoints').value = mc.fixedRewardPoints || 0;
+        if (document.getElementById('adsSdkSnippet')) document.getElementById('adsSdkSnippet').value = mc.sdkSnippet || '';
+        if (document.getElementById('adsZoneId')) document.getElementById('adsZoneId').value = mc.zoneId || '';
+        if (document.getElementById('adsAppId')) document.getElementById('adsAppId').value = mc.appId || '';
         if (document.getElementById('appName')) document.getElementById('appName').value = (data.appConfig && data.appConfig.appName) || 'TGTask';
     } catch (error) {
         console.error('Error loading configuration:', error);
@@ -589,8 +592,17 @@ const switchTab = (tabName) => {
             loadSocialTasks();
             break;
         case 'ads':
-            // Reuse configuration loader to populate Monetag fields
+            // Reuse configuration loader + load ads stats
             loadConfiguration();
+            (async ()=>{
+                try {
+                    const s = await apiCall('/api/admin/ads-stats');
+                    document.getElementById('adsTodayClicks').textContent = formatNumber(s.todayClicks || 0);
+                    document.getElementById('adsTotalClicks').textContent = formatNumber(s.totalClicks || 0);
+                    document.getElementById('adsTodayCompleted').textContent = formatNumber(s.todayCompleted || 0);
+                    document.getElementById('adsTotalCompleted').textContent = formatNumber(s.totalCompleted || 0);
+                } catch(_) {}
+            })();
             break;
         case 'moderation':
             // no initial load
@@ -742,7 +754,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const payload = {
                 hourlyLimit: parseInt(document.getElementById('adsHourlyLimit')?.value || '20'),
                 dailyLimit: parseInt(document.getElementById('adsDailyLimit')?.value || '60'),
-                fixedRewardPoints: parseInt(document.getElementById('adsFixedRewardPoints')?.value || '0')
+                fixedRewardPoints: parseInt(document.getElementById('adsFixedRewardPoints')?.value || '0'),
+                sdkSnippet: document.getElementById('adsSdkSnippet')?.value || '',
+                zoneId: document.getElementById('adsZoneId')?.value || '',
+                appId: document.getElementById('adsAppId')?.value || ''
             };
             try {
                 await apiCall('/api/admin/config/monetag', { method: 'POST', body: JSON.stringify(payload) });

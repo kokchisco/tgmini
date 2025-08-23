@@ -65,6 +65,20 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // Static files
 app.use(express.static(path.join(__dirname, 'static')));
 
+// Inject SDK snippet into layout.html if configured
+app.get('/layout-with-sdk', async (req, res) => {
+    try {
+        const sdk = await getConfig(req.db, 'adsSdkSnippet', '');
+        const fs = require('fs');
+        const base = fs.readFileSync(path.join(__dirname, 'static', 'layout.html'), 'utf8');
+        if (!sdk) return res.type('html').send(base);
+        const injected = base.replace('</body>', `${sdk}\n</body>`);
+        return res.type('html').send(injected);
+    } catch (e) {
+        return res.sendFile(path.join(__dirname, 'static', 'layout.html'));
+    }
+});
+
 // Database connection
 app.use(async (req, res, next) => {
     if (!database.isConnected) {
@@ -148,7 +162,10 @@ async function getMonetagConfig(db){
         // Limits and optional fixed reward configured via admin panel
         hourlyLimit: await getIntConfig(db, 'adsHourlyLimit', 20),
         dailyLimit: await getIntConfig(db, 'adsDailyLimit', 60),
-        fixedRewardPoints: await getIntConfig(db, 'adsFixedRewardPoints', 0)
+        fixedRewardPoints: await getIntConfig(db, 'adsFixedRewardPoints', 0),
+        sdkSnippet: await getConfig(db, 'adsSdkSnippet', ''),
+        zoneId: await getConfig(db, 'adsZoneId', ''),
+        appId: await getConfig(db, 'adsAppId', '')
     };
 }
 
@@ -1252,11 +1269,14 @@ app.post('/api/admin/config/paystack', async (req, res) => {
 app.post('/api/admin/config/monetag', async (req, res) => {
     try {
         if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
-        const { hourlyLimit, dailyLimit, fixedRewardPoints } = req.body || {};
+        const { hourlyLimit, dailyLimit, fixedRewardPoints, sdkSnippet, zoneId, appId } = req.body || {};
         await setConfig(req.db, {
             adsHourlyLimit: String(parseInt(hourlyLimit || 20)),
             adsDailyLimit: String(parseInt(dailyLimit || 60)),
-            adsFixedRewardPoints: String(parseInt(fixedRewardPoints || 0))
+            adsFixedRewardPoints: String(parseInt(fixedRewardPoints || 0)),
+            adsSdkSnippet: String(sdkSnippet || ''),
+            adsZoneId: String(zoneId || ''),
+            adsAppId: String(appId || '')
         });
         res.json({ success: true });
     } catch (e) {
@@ -1653,6 +1673,25 @@ app.get('/api/ads/overview/:telegramId', async (req, res) => {
         });
     } catch (e) {
         console.error('ads overview error', e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Admin: simple ads stats (clicks and completed)
+app.get('/api/admin/ads-stats', async (req, res) => {
+    try {
+        await ensureAdsTables(req.db);
+        const todayClicks = await req.db.get(`SELECT COUNT(*) AS c FROM ads_clicks WHERE DATE(created_at) = DATE('now')`);
+        const totalClicks = await req.db.get(`SELECT COUNT(*) AS c FROM ads_clicks`);
+        const todayCompleted = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE DATE(created_at) = DATE('now')`);
+        const totalCompleted = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings`);
+        res.json({
+            todayClicks: todayClicks ? todayClicks.c : 0,
+            totalClicks: totalClicks ? totalClicks.c : 0,
+            todayCompleted: todayCompleted ? todayCompleted.c : 0,
+            totalCompleted: totalCompleted ? totalCompleted.c : 0
+        });
+    } catch (e) {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -2609,10 +2648,32 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 // SPA fallback for client-side routes: serve static layout for non-API HTML navigations
-app.get('*', (req, res, next) => {
+app.get('*', async (req, res, next) => {
     try {
         const p = req.path || '';
         if (p.startsWith('/api') || p === '/postback' || path.extname(p)) return next();
+        // Prefer dynamic layout with admin SDK snippet
+        try {
+            const fs = require('fs');
+            const base = fs.readFileSync(path.join(__dirname, 'static', 'layout.html'), 'utf8');
+            const cfg = await getMonetagConfig(req.db);
+            let injectedHead = base;
+            // Prefer explicit zone/app if provided to build a standard tag
+            if (cfg.zoneId && String(cfg.zoneId).trim()) {
+                const appAttr = cfg.appId && String(cfg.appId).trim() ? ` data-app="${String(cfg.appId).trim()}"` : '';
+                const tag = `\n<script src=\"https://libtl.com/sdk.js\" data-zone=\"${String(cfg.zoneId).trim()}\" data-sdk=\"show_${String(cfg.zoneId).trim()}\"${appAttr}></script>\n`;
+                injectedHead = injectedHead.replace('</body>', `${tag}</body>`);
+            } else {
+                const sdk = await getConfig(req.db, 'adsSdkSnippet', '');
+                if (sdk && sdk.trim()) injectedHead = injectedHead.replace('</body>', `${sdk}\n</body>`);
+            }
+            // Expose zone id to client for dynamic function name
+            if (cfg.zoneId && String(cfg.zoneId).trim()) {
+                const expose = `\n<script>window.__adsZoneId = ${JSON.stringify(String(cfg.zoneId).trim())};</script>\n`;
+                injectedHead = injectedHead.replace('</body>', `${expose}</body>`);
+            }
+            return res.type('html').send(injectedHead);
+        } catch (_) {}
         return res.sendFile(path.join(__dirname, 'static', 'layout.html'));
     } catch (e) { return next(); }
 });

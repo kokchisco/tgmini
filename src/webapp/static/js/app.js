@@ -347,8 +347,13 @@ const pageLoaders = {
                         <div id="adsTotalEarnings" style="font-size:24px;font-weight:700;">0</div>
                     </div>
                 </div>
-                <a href="#" id="adsStartBtn" class="btn btn-primary" style="display:block;margin-top:16px;width:100%;">Start Task</a>
-                <div id="adsStatus" style="margin-top:10px;font-size:12px;opacity:0.9;"></div>
+                <a href="#" id="adsStartBtn" class="btn btn-primary" style="display:block;margin-top:16px;width:100%;text-align:center;">Start Task</a>
+                <div id="adsStatus" style="margin-top:10px;font-size:12px;opacity:0.9;text-align:center;"></div>
+            </div>
+            <div class="card" style="padding:12px;">
+                <div style="font-size:13px; color:#444; line-height:1.5;">
+                    Click "Start Task" and then tap "Continue" to open the ad page. Keep it open for at least 15 seconds before closing to receive your reward.
+                </div>
             </div>
         `;
         // Overview fetch to render persistent counters from backend
@@ -369,7 +374,10 @@ const pageLoaders = {
             } catch(_) { /* ignore */ }
         })();
         // Preload ad to reduce delay
-        (async () => { try { await waitForMonetagSdk(); if (typeof window.show_9758957==='function') await window.show_9758957({ type:'preload', ymid: String(userId) }); } catch(_){} })();
+        (async () => { try { await waitForMonetagSdk();
+            const id = window.__adsZoneId || (typeof window.show_9758957==='function' && '9758957');
+            if (id && typeof window[`show_${id}`] === 'function') await window[`show_${id}`]({ type:'preload', ymid: String(userId) });
+        } catch(_){} })();
         // Direct start handler using SDK with ymid + requestVar
         try {
             const btn = document.getElementById('adsStartBtn');
@@ -382,14 +390,16 @@ const pageLoaders = {
                     // 15s cooldown enforcement
                     const now = Date.now();
                     const last = Number(localStorage.getItem('adsLastStartTs') || '0');
-                    if (now - last < 15000) throw new Error('Please wait 15 seconds before trying again');
+                    if (now - last < 15000) throw new Error('You must complete task in 15 seconds');
                     localStorage.setItem('adsLastStartTs', String(now));
                     await waitForMonetagSdk();
-                    if (typeof window.show_9758957 !== 'function') throw new Error('SDK not loaded');
+                    const zid = window.__adsZoneId || '9758957';
+                    const fn = window[`show_${zid}`];
+                    if (typeof fn !== 'function') throw new Error('SDK not loaded');
                     try {
-                        await window.show_9758957({ ymid: String(userId), requestVar: 'ads_main' });
+                        await fn({ ymid: String(userId), requestVar: 'ads_main' });
                     } catch (e1) {
-                        await window.show_9758957({ type: 'pop', ymid: String(userId), requestVar: 'ads_main' });
+                        await fn({ type: 'pop', ymid: String(userId), requestVar: 'ads_main' });
                     }
                     // Client-side completion ping (fallback if postback delays)
                     try {
@@ -414,6 +424,11 @@ const pageLoaders = {
                             try {
                                 const life = document.getElementById('adsLifetimeCount');
                                 if (life) { const v = parseInt(life.textContent.replace(/\D+/g,'')) || 0; life.textContent = String(v + 1); }
+                                const earn = document.getElementById('adsTotalEarnings');
+                                if (earn && resp.pointsAwarded) {
+                                    const cur = parseInt(earn.textContent.replace(/\D+/g,'')) || 0;
+                                    earn.textContent = String(cur + resp.pointsAwarded);
+                                }
                             } catch(_) {}
                         }
                     } catch (_) { /* ignore */ }
@@ -427,8 +442,18 @@ const pageLoaders = {
         } catch(_) {}
         // Add SDK diagnostics to surface exact network failure reason
         try {
-            if (typeof window.show_9758957 !== 'function') {
-                console.warn('Monetag SDK function show_9758957 is not available');
+            const zid = window.__adsZoneId || '9758957';
+            if (typeof window[`show_${zid}`] !== 'function') {
+                // Quietly attempt reload of SDK if missing
+                const el = document.getElementById('monetagSdkScript');
+                if (el && el.parentNode) { try { el.parentNode.removeChild(el); } catch(_) {}
+                    const scr = document.createElement('script');
+                    scr.id = 'monetagSdkScript';
+                    scr.src = 'https://libtl.com/sdk.js';
+                    scr.setAttribute('data-zone', String(zid));
+                    scr.setAttribute('data-sdk', `show_${String(zid)}`);
+                    document.head.appendChild(scr);
+                }
             }
         } catch (_) {}
     },

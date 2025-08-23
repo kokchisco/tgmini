@@ -993,6 +993,24 @@
             <div class="config-card">
                 <div class="config-title"><i class="fas fa-magnet"></i> Monetag Ads</div>
                 <div style="opacity:0.9; font-size:14px; margin-bottom:12px;">Monetag is now integrated via header SDK. No extra settings are required here.</div>
+                <div class="stats-grid" style="margin-bottom:12px;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="adsTodayClicks">0</div>
+                        <div class="stat-label">Today Clicks</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="adsTotalClicks">0</div>
+                        <div class="stat-label">All Time Clicks</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="adsTodayCompleted">0</div>
+                        <div class="stat-label">Today Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="adsTotalCompleted">0</div>
+                        <div class="stat-label">All Time Completed</div>
+                    </div>
+                </div>
                 <form id="monetagConfigForm">
                     <div class="form-row">
                         <div class="form-group">
@@ -1006,6 +1024,21 @@
                         <div class="form-group">
                             <label class="form-label">Fixed Reward Points (per completed ad)</label>
                             <input type="number" class="form-input" id="adsFixedRewardPoints" placeholder="0 = use revenue">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Zone ID / SDK ID (numbers)</label>
+                            <input type="text" class="form-input" id="adsZoneId" placeholder="e.g., 9758957">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Mini App ID (optional)</label>
+                            <input type="text" class="form-input" id="adsAppId" placeholder="e.g., 3011133">
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="form-label">SDK Script Snippet (paste full <script> tag)</label>
+                            <textarea class="form-textarea" id="adsSdkSnippet" placeholder="&lt;script src='https://libtl.com/sdk.js' data-zone='XXXXX' data-sdk='show_XXXXX'&gt;&lt;/script&gt;"></textarea>
+                            <div class="form-help" style="font-size:12px;opacity:0.85;margin-top:6px;">This code will be injected into the app header automatically.</div>
                         </div>
                     </div>
                     <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Limits</button>
