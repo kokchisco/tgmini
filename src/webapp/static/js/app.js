@@ -352,7 +352,9 @@ const pageLoaders = {
             </div>
         `;
         // Overview fetch removed to avoid dependency on ads configuration; values remain defaults
-        // Direct start handler (rewarded interstitial)
+        // Preload ad to reduce delay
+        (async () => { try { await waitForMonetagSdk(); if (typeof window.show_9758957==='function') await window.show_9758957({ type:'preload', ymid: String(userId) }); } catch(_){} })();
+        // Direct start handler using SDK with ymid + requestVar
         try {
             const btn = document.getElementById('adsStartBtn');
             const status = document.getElementById('adsStatus');
@@ -361,17 +363,12 @@ const pageLoaders = {
                 if (status) status.textContent = 'Starting…';
                 btn.disabled = true;
                 try {
-                    // Prefer SDK injected in header by data-sdk show_9758957
-                    if (typeof window.show_9758957 === 'function') {
-                        try {
-                            await window.show_9758957();
-                        } catch (e1) {
-                            // Fallback to rewarded popup variant if interstitial fails
-                            try { await window.show_9758957('pop'); } catch (e2) { throw new Error((e2 && e2.message) || (e1 && e1.message) || 'SDK call failed'); }
-                        }
-                    } else {
-                        // Fallback to dynamic loader/start (legacy)
-                        await startAdsFlow();
+                    await waitForMonetagSdk();
+                    if (typeof window.show_9758957 !== 'function') throw new Error('SDK not loaded');
+                    try {
+                        await window.show_9758957({ ymid: String(userId), requestVar: 'ads_main' });
+                    } catch (e1) {
+                        await window.show_9758957({ type: 'pop', ymid: String(userId), requestVar: 'ads_main' });
                     }
                     if (status) status.textContent = '';
                 } catch (err) {
@@ -1900,6 +1897,19 @@ window.claimChannelJoin = claimChannelJoin;
 window.claimGroupJoin = claimGroupJoin;
 window.contactAdmin = contactAdmin;
 window.toggleFaq = toggleFaq;
+
+// Wait for Monetag SDK helper
+function waitForMonetagSdk(timeoutMs = 8000){
+    return new Promise((resolve, reject) => {
+        const started = Date.now();
+        const check = () => {
+            if (typeof window.show_9758957 === 'function') return resolve();
+            if (Date.now() - started > timeoutMs) return reject(new Error('SDK not loaded'));
+            setTimeout(check, 200);
+        };
+        check();
+    });
+}
 
 // Ads Task Modal and flow
 async function openAdsTaskModal(){
