@@ -1907,44 +1907,7 @@ window.openAdsTaskModal = openAdsTaskModal;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
-    // Ensure footer nav layout matches latest spec but preserve original structure and styling
-    try {
-        const footer = document.getElementById('footerNav') || document.querySelector('.footer-nav-container');
-        if (footer && !footer.dataset.patched) {
-            const items = footer.querySelectorAll('.footer-nav-item');
-            const map = { home: '/home', ads: '/ads', earn: '/earn', tasks: '/tasks', profile: '/profile' };
-            items.forEach((a) => {
-                const page = a.getAttribute('data-page');
-                if (map[page]) a.setAttribute('href', map[page]);
-                if (page === 'history') { a.setAttribute('data-page','tasks'); a.querySelector('span').textContent='Tasks'; a.querySelector('i').className='fas fa-tasks'; a.setAttribute('href','/tasks'); }
-                if (page === 'tasks') { a.setAttribute('data-page','ads'); a.querySelector('span').textContent='Ads'; a.querySelector('i').className='fas fa-magnet'; a.setAttribute('href','/ads'); }
-            });
-            // If data-page attributes are missing or stale, fallback by index positions (old order: Home, Tasks, Earn, History, Profile)
-            if (items.length === 5) {
-                const second = items[1]; // Tasks -> Ads
-                const fourth = items[3]; // History -> Tasks
-                if (second) {
-                    second.setAttribute('data-page','ads');
-                    second.setAttribute('href','/ads');
-                    const s = second.querySelector('span'); if (s) s.textContent = 'Ads';
-                    const i = second.querySelector('i'); if (i) i.className = 'fas fa-magnet';
-                }
-                if (fourth) {
-                    fourth.setAttribute('data-page','tasks');
-                    fourth.setAttribute('href','/tasks');
-                    const s2 = fourth.querySelector('span'); if (s2) s2.textContent = 'Tasks';
-                    const i2 = fourth.querySelector('i'); if (i2) i2.className = 'fas fa-tasks';
-                }
-            }
-            // Enforce horizontal layout (left-to-right) in case cached styles are missing
-            try {
-                footer.style.display = 'flex';
-                footer.style.flexWrap = 'nowrap';
-                footer.style.justifyContent = 'space-around';
-            } catch(_) {}
-            footer.dataset.patched = '1';
-        }
-    } catch(_) {}
+    // Do not remap footer items at runtime; use static HTML as source of truth
     // Try to sync Telegram profile so backend has username/first/last
     (async () => {
         try {
