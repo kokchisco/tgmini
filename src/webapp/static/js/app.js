@@ -1942,7 +1942,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 footer.style.flexWrap = 'nowrap';
                 footer.style.justifyContent = 'space-around';
             } catch(_) {}
-            });
             footer.dataset.patched = '1';
         }
     } catch(_) {}
