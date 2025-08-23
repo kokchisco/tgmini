@@ -1657,6 +1657,37 @@ app.get('/api/ads/overview/:telegramId', async (req, res) => {
     }
 });
 
+// Client-confirmed completion fallback (credits fixed reward with limits)
+app.post('/api/ads/complete', async (req, res) => {
+    try {
+        const { telegramId } = req.body || {};
+        const tgId = parseInt(telegramId);
+        if (!Number.isFinite(tgId)) return res.status(400).json({ error: 'Invalid user' });
+        await ensureAdsTables(req.db);
+        const cfg = await getMonetagConfig(req.db);
+        const hourCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= datetime('now', '-1 hour')`, [tgId]);
+        const dayCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [tgId]);
+        if ((hourCnt?.c || 0) >= cfg.hourlyLimit) return res.status(429).json({ error: 'Hourly limit reached' });
+        if ((dayCnt?.c || 0) >= cfg.dailyLimit) return res.status(429).json({ error: 'Daily limit reached' });
+        // Determine points
+        const DEFAULT_POINTS = 100;
+        const points = cfg.fixedRewardPoints > 0 ? cfg.fixedRewardPoints : DEFAULT_POINTS;
+        // Credit
+        await req.db.transaction(async (tx) => {
+            const u = await tx.get('SELECT id FROM users WHERE telegram_id = ?', [tgId]);
+            if (!u) throw new Error('User not found');
+            await tx.run(`UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ?, updated_at = datetime('now') WHERE id = ?`, [points, points, u.id]);
+            await tx.run(`INSERT INTO ads_earnings (telegram_id, provider, provider_txid, click_id, points_earned, revenue_amount) VALUES (?, 'client', NULL, NULL, ?, NULL)`, [tgId, points]);
+            await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at) VALUES (?, ?, datetime('now'))`, [tgId, points]);
+        });
+        try { await sendTelegramMessage(tgId, `🎯 Ads task completed. You earned +${points} points.`); } catch (_) {}
+        res.json({ success: true, pointsAwarded: points });
+    } catch (e) {
+        console.error('ads complete error', e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Ads Task: start - returns smartlink and click_id
 // Minimal start endpoint retained only for click tracking/limits
 app.post('/api/ads/start', async (req, res) => {

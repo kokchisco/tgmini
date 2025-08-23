@@ -370,6 +370,27 @@ const pageLoaders = {
                     } catch (e1) {
                         await window.show_9758957({ type: 'pop', ymid: String(userId), requestVar: 'ads_main' });
                     }
+                    // Client-side completion ping (fallback if postback delays)
+                    try {
+                        const resp = await apiCall('/api/ads/complete', { method: 'POST', body: JSON.stringify({ telegramId: userId }) });
+                        if (resp && resp.success) {
+                            const s = document.getElementById('adsStatus');
+                            if (s) s.textContent = `Credited +${resp.pointsAwarded} points`;
+                            // Update overview bars incrementally
+                            const d = document.getElementById('adsDailyCount');
+                            const h = document.getElementById('adsHourlyCount');
+                            const dl = parseInt((document.getElementById('adsDailyLimit')?.textContent || '0').replace(/\D+/g,'')) || 60;
+                            const hl = parseInt((document.getElementById('adsHourlyLimit')?.textContent || '0').replace(/\D+/g,'')) || 20;
+                            const inc = (el, barId, lim) => {
+                                if (!el) return;
+                                const val = parseInt(el.textContent.replace(/\D+/g,'')) || 0;
+                                const nv = val + 1; el.textContent = String(nv);
+                                const bar = document.getElementById(barId); if (bar) bar.style.width = `${Math.min(100, Math.round((nv/lim)*100))}%`;
+                            };
+                            inc(d, 'adsDailyBar', dl);
+                            inc(h, 'adsHourlyBar', hl);
+                        }
+                    } catch (_) { /* ignore */ }
                     if (status) status.textContent = '';
                 } catch (err) {
                     if (status) status.textContent = err && err.message ? err.message : 'Failed to start ads task';
