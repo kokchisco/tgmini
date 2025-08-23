@@ -24,8 +24,8 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com", "data:"],
-            scriptSrc: ["'self'", "https://telegram.org", "https://code.iconify.design"],
-            scriptSrcElem: ["'self'", "https://telegram.org", "https://code.iconify.design"],
+            scriptSrc: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com"],
+            scriptSrcElem: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com"],
             connectSrc: ["'self'", "https://api.telegram.org", "https://api.iconify.design", "https://code.iconify.design"],
             imgSrc: ["'self'", "data:", "https:"],
             frameSrc: ["'self'", "https://telegram.org"]
