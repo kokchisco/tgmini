@@ -2575,6 +2575,15 @@ app.use((err, req, res, next) => {
 });
 
 // 404 handler
+// SPA fallback for client-side routes: serve static layout for non-API HTML navigations
+app.get('*', (req, res, next) => {
+    try {
+        const p = req.path || '';
+        if (p.startsWith('/api') || p === '/postback' || path.extname(p)) return next();
+        return res.sendFile(path.join(__dirname, 'static', 'layout.html'));
+    } catch (e) { return next(); }
+});
+
 app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
