@@ -24,8 +24,8 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com", "data:"],
-            scriptSrc: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com"],
-            scriptSrcElem: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com"],
+            scriptSrc: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com", "http://libtl.com"],
+            scriptSrcElem: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com", "http://libtl.com"],
             connectSrc: ["'self'", "https://api.telegram.org", "https://api.iconify.design", "https://code.iconify.design", "https://libtl.com"],
             imgSrc: ["'self'", "data:", "https:"],
             frameSrc: ["'self'", "https://telegram.org", "https://libtl.com"]
@@ -1701,7 +1701,8 @@ app.all('/postback', async (req, res) => {
         const cfg = await getMonetagConfig(req.db);
         const q = req.method === 'POST' ? (req.body || {}) : (req.query || {});
         const token = String(q.token || '');
-        if (!cfg.token || token !== cfg.token) return res.status(403).send('BAD_TOKEN');
+        // If a token is configured, validate. If not, accept without token.
+        if (cfg.token && token !== cfg.token) return res.status(403).send('BAD_TOKEN');
         const tgId = parseInt(q.telegram_id || q.sub1 || q.uid);
         const zoneId = String(q.zone_id || cfg.zoneId || '');
         const eventType = String(q.event_type || '');

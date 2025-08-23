@@ -374,7 +374,7 @@ const pageLoaders = {
                 const hlimEl = document.getElementById('adsHourlyLimit'); if (hlimEl) hlimEl.textContent = `Limit: ${hlim} tasks/hour`;
             } catch (_) {}
         })();
-        // Direct start handler
+        // Direct start handler (rewarded interstitial)
         try {
             const btn = document.getElementById('adsStartBtn');
             const status = document.getElementById('adsStatus');
@@ -383,7 +383,15 @@ const pageLoaders = {
                 if (status) status.textContent = 'Starting…';
                 btn.disabled = true;
                 try {
-                    await startAdsFlow();
+                    // Prefer SDK injected in header by data-sdk show_9758957
+                    if (typeof window.show_9758957 === 'function') {
+                        // Basic rewarded interstitial
+                        await window.show_9758957();
+                        // TODO: call backend to credit if needed
+                    } else {
+                        // Fallback to dynamic loader/start (legacy)
+                        await startAdsFlow();
+                    }
                     if (status) status.textContent = '';
                 } catch (err) {
                     if (status) status.textContent = err && err.message ? err.message : 'Failed to start ads task';
