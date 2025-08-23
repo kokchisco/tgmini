@@ -1919,6 +1919,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (page === 'history') { a.setAttribute('data-page','tasks'); a.querySelector('span').textContent='Tasks'; a.querySelector('i').className='fas fa-tasks'; a.setAttribute('href','/tasks'); }
                 if (page === 'tasks') { a.setAttribute('data-page','ads'); a.querySelector('span').textContent='Ads'; a.querySelector('i').className='fas fa-magnet'; a.setAttribute('href','/ads'); }
             });
+            // Enforce horizontal layout (left-to-right) in case cached styles are missing
+            try {
+                footer.style.display = 'flex';
+                footer.style.flexWrap = 'nowrap';
+                footer.style.justifyContent = 'space-around';
+            } catch(_) {}
+            });
             footer.dataset.patched = '1';
         }
     } catch(_) {}
