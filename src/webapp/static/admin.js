@@ -234,6 +234,16 @@ const loadConfiguration = async () => {
         const pc = data.paystackConfig || {};
         const pe = document.getElementById('paystackEnabled'); if (pe) pe.checked = !!pc.enabled;
         const ps = document.getElementById('paystackSecret'); if (ps) ps.value = pc.secret || '';
+        // Monetag config
+        const mc = data.monetagConfig || {};
+        if (document.getElementById('monetagEnabled')) document.getElementById('monetagEnabled').checked = !!mc.enabled;
+        if (document.getElementById('monetagSmartlink')) document.getElementById('monetagSmartlink').value = mc.smartlink || '';
+        if (document.getElementById('monetagToken')) document.getElementById('monetagToken').value = mc.token || '';
+        if (document.getElementById('monetagFixedRewardPoints')) document.getElementById('monetagFixedRewardPoints').value = mc.fixedRewardPoints || 0;
+        if (document.getElementById('adsHourlyLimit')) document.getElementById('adsHourlyLimit').value = mc.hourlyLimit || 20;
+        if (document.getElementById('adsDailyLimit')) document.getElementById('adsDailyLimit').value = mc.dailyLimit || 60;
+        if (document.getElementById('adsRequiredSeconds')) document.getElementById('adsRequiredSeconds').value = mc.requiredSeconds || 20;
+        try { const token = mc.token || ''; const base = window.location.origin; document.getElementById('monetagPostbackUrl').value = `${base}/api/monetag/postback?token=${encodeURIComponent(token)}&sub1={telegramId}&sub2={clickId}&revenue={revenue}&txid={txid}`; } catch(_) {}
         if (document.getElementById('appName')) document.getElementById('appName').value = (data.appConfig && data.appConfig.appName) || 'TGTask';
     } catch (error) {
         console.error('Error loading configuration:', error);
@@ -724,6 +734,41 @@ document.addEventListener('DOMContentLoaded', async () => {
             tg.showAlert('❌ ' + (err.message || 'Failed to save Paystack config'));
         }
     });
+
+    // Monetag config form and tab logic
+    const monetagForm = document.getElementById('monetagConfigForm');
+    const updateMonetagPostback = () => {
+        try {
+            const base = window.location.origin;
+            const token = document.getElementById('monetagToken')?.value || '';
+            const url = `${base}/api/monetag/postback?token=${encodeURIComponent(token)}&sub1={telegramId}&sub2={clickId}&revenue={revenue}&txid={txid}`;
+            const el = document.getElementById('monetagPostbackUrl');
+            if (el) el.value = url;
+        } catch(_) {}
+    };
+    if (monetagForm) {
+        monetagForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                enabled: !!document.getElementById('monetagEnabled')?.checked,
+                smartlink: document.getElementById('monetagSmartlink')?.value || '',
+                token: document.getElementById('monetagToken')?.value || '',
+                fixedRewardPoints: parseInt(document.getElementById('monetagFixedRewardPoints')?.value || '0'),
+                hourlyLimit: parseInt(document.getElementById('adsHourlyLimit')?.value || '20'),
+                dailyLimit: parseInt(document.getElementById('adsDailyLimit')?.value || '60'),
+                requiredSeconds: parseInt(document.getElementById('adsRequiredSeconds')?.value || '20')
+            };
+            try {
+                await apiCall('/api/admin/config/monetag', { method: 'POST', body: JSON.stringify(payload) });
+                tg.showAlert('✅ Monetag configuration saved successfully!');
+            } catch (err) {
+                tg.showAlert('❌ ' + (err.message || 'Failed to save Monetag config'));
+            }
+        });
+        const tokenEl = document.getElementById('monetagToken');
+        if (tokenEl) tokenEl.addEventListener('input', updateMonetagPostback);
+        updateMonetagPostback();
+    }
 
     // App configuration form
     const appForm = document.getElementById('appConfigForm');

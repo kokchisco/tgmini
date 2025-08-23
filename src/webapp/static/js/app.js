@@ -236,7 +236,7 @@ const pageLoaders = {
 
                 <div class="card">
                     <h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Quick Actions</h3>
-                                         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
                          <a href="/withdraw" class="btn btn-primary" style="text-align: center; padding: 16px 8px;">
                              <span class="iconify" data-icon="mdi:bank-transfer"></span>
                              <div style="font-size: 12px; margin-top: 4px;">Withdraw</div>
@@ -248,6 +248,10 @@ const pageLoaders = {
                          <a href="/bank" class="btn btn-secondary" style="text-align: center; padding: 16px 8px;">
                              <span class="iconify" data-icon="mdi:bank-outline"></span>
                              <div style="font-size: 12px; margin-top: 4px;">Bank</div>
+                         </a>
+                         <a href="#" id="adsTaskBtn" class="btn btn-secondary" style="text-align: center; padding: 16px 8px;">
+                             <span class="iconify" data-icon="mdi:magnet"></span>
+                             <div style="font-size: 12px; margin-top: 4px;">Ads</div>
                          </a>
                      </div>
                 </div>
@@ -264,6 +268,7 @@ const pageLoaders = {
             `;
             
             mainContent.innerHTML = html;
+            try { document.getElementById('adsTaskBtn')?.addEventListener('click', (e)=>{ e.preventDefault(); openAdsTaskModal(); }); } catch(_) {}
             await loadLeaderboard();
         } catch (error) {
             mainContent.innerHTML = showError('Failed to load home page');
@@ -1819,6 +1824,60 @@ window.claimChannelJoin = claimChannelJoin;
 window.claimGroupJoin = claimGroupJoin;
 window.contactAdmin = contactAdmin;
 window.toggleFaq = toggleFaq;
+
+// Ads Task Modal and flow
+async function openAdsTaskModal(){
+    try {
+        const overview = await apiCall(`/api/ads/overview/${userId}`);
+        const modal = document.createElement('div');
+        Object.assign(modal.style, { position:'fixed', inset:'0', background:'rgba(0,0,0,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' });
+        const card = document.createElement('div');
+        Object.assign(card.style, { width:'100%', maxWidth:'460px', background:'#16181a', color:'#fff', borderRadius:'16px', padding:'20px', boxShadow:'0 12px 32px rgba(0,0,0,0.5)' });
+        card.innerHTML = `
+            <div style="font-size:18px;font-weight:700;margin-bottom:12px;">Ads Task Overview</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                    <div style="opacity:0.85;font-size:12px;">Daily Tasks Completed</div>
+                    <div style="font-size:20px;font-weight:700;">${overview.dailyCompleted || 0}</div>
+                    <div style="opacity:0.75;font-size:12px;">Limit: ${overview.dailyLimit || 60} tasks/day</div>
+                </div>
+                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                    <div style="opacity:0.85;font-size:12px;">Hourly Tasks Completed</div>
+                    <div style="font-size:20px;font-weight:700;">${overview.hourlyCompleted || 0}</div>
+                    <div style="opacity:0.75;font-size:12px;">Limit: ${overview.hourlyLimit || 20} tasks/hour</div>
+                </div>
+                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                    <div style="opacity:0.85;font-size:12px;">Lifetime Completed Tasks</div>
+                    <div style="font-size:20px;font-weight:700;">${overview.lifetimeCompleted || 0}</div>
+                </div>
+                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                    <div style="opacity:0.85;font-size:12px;">Total Earnings</div>
+                    <div style="font-size:20px;font-weight:700;">${formatNumber(overview.totalEarnings || 0)}</div>
+                </div>
+            </div>
+            <button id="adsStartBtn" class="btn btn-primary" style="width:100%">Start Task</button>
+        `;
+        modal.appendChild(card);
+        modal.addEventListener('click', (e)=>{ if (e.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
+        document.getElementById('adsStartBtn').addEventListener('click', async ()=>{
+            try {
+                const s = await apiCall('/api/ads/start', { method: 'POST', body: JSON.stringify({ telegramId: userId }) });
+                if (s && s.smartlink) {
+                    // open smartlink in Telegram or new tab
+                    try { if (window.Telegram?.WebApp?.openTelegramLink) return window.Telegram.WebApp.openTelegramLink(s.smartlink); } catch(_) {}
+                    window.open(s.smartlink, '_blank');
+                }
+                modal.remove();
+            } catch (err) {
+                alert(err.message || 'Failed to start ads task');
+            }
+        });
+    } catch (e) {
+        alert('Unable to load ads overview');
+    }
+}
+window.openAdsTaskModal = openAdsTaskModal;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {

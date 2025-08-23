@@ -142,6 +142,44 @@ async function getIntConfig(db, key, fallback){
     return Number.isFinite(n) ? n : fallback;
 }
 
+// Monetag helpers and config
+async function getMonetagConfig(db){
+    return {
+        enabled: (await getConfig(db, 'monetagEnabled', 'false')) === 'true',
+        smartlink: await getConfig(db, 'monetagSmartlink', ''),
+        token: await getConfig(db, 'monetagToken', ''),
+        fixedRewardPoints: await getIntConfig(db, 'monetagFixedRewardPoints', 0),
+        hourlyLimit: await getIntConfig(db, 'adsHourlyLimit', 20),
+        dailyLimit: await getIntConfig(db, 'adsDailyLimit', 60),
+        requiredSeconds: await getIntConfig(db, 'adsRequiredSeconds', 20)
+    };
+}
+
+async function ensureAdsTables(db){
+    try {
+        await db.run(`CREATE TABLE IF NOT EXISTS ads_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            click_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT (datetime('now'))
+        )`);
+    } catch (_) {}
+    try {
+        await db.run(`CREATE TABLE IF NOT EXISTS ads_earnings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            provider_txid TEXT,
+            click_id TEXT,
+            points_earned INTEGER NOT NULL,
+            revenue_amount REAL,
+            created_at DATETIME DEFAULT (datetime('now')),
+            UNIQUE(provider, provider_txid)
+        )`);
+    } catch (_) {}
+}
+
 // Paystack helpers and config
 function getPaystackBankCode(localBankName){
     const name = String(localBankName || '').toLowerCase();
@@ -1038,7 +1076,8 @@ app.get('/api/admin/config', async (req, res) => {
             paystackConfig: {
                 enabled: (await getConfig(req.db, 'paystackAuto', 'false')) === 'true',
                 secret: await getConfig(req.db, 'paystackSecret', '')
-            }
+            },
+            monetagConfig: await getMonetagConfig(req.db)
         };
         res.json(response);
     } catch (error) {
@@ -1179,6 +1218,27 @@ app.post('/api/admin/config/paystack', async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error('Error saving paystack config:', e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Admin: Monetag config
+app.post('/api/admin/config/monetag', async (req, res) => {
+    try {
+        if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
+        const { enabled, smartlink, token, fixedRewardPoints, hourlyLimit, dailyLimit, requiredSeconds } = req.body || {};
+        await setConfig(req.db, {
+            monetagEnabled: enabled ? 'true' : 'false',
+            monetagSmartlink: smartlink || '',
+            monetagToken: token || '',
+            monetagFixedRewardPoints: String(parseInt(fixedRewardPoints || 0)),
+            adsHourlyLimit: String(parseInt(hourlyLimit || 20)),
+            adsDailyLimit: String(parseInt(dailyLimit || 60)),
+            adsRequiredSeconds: String(parseInt(requiredSeconds || 20))
+        });
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Error saving monetag config:', e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1551,6 +1611,105 @@ app.post('/api/admin/withdrawals/:id/reject', async (req, res) => {
     }
 });
 
+// Ads Task: overview for user
+app.get('/api/ads/overview/:telegramId', async (req, res) => {
+    try {
+        const telegramId = parseInt(req.params.telegramId);
+        if (!Number.isFinite(telegramId)) return res.status(400).json({ error: 'Invalid user' });
+        await ensureAdsTables(req.db);
+        const cfg = await getMonetagConfig(req.db);
+        const sinceHour = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= datetime('now', '-1 hour')`, [telegramId]);
+        const sinceDay = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [telegramId]);
+        const lifetime = await req.db.get(`SELECT COUNT(*) AS c, COALESCE(SUM(points_earned),0) AS sum FROM ads_earnings WHERE telegram_id = ?`, [telegramId]);
+        res.json({
+            enabled: cfg.enabled,
+            hourlyCompleted: sinceHour ? sinceHour.c : 0,
+            hourlyLimit: cfg.hourlyLimit,
+            dailyCompleted: sinceDay ? sinceDay.c : 0,
+            dailyLimit: cfg.dailyLimit,
+            lifetimeCompleted: lifetime ? lifetime.c : 0,
+            totalEarnings: lifetime ? lifetime.sum : 0
+        });
+    } catch (e) {
+        console.error('ads overview error', e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Ads Task: start - returns smartlink and click_id
+app.post('/api/ads/start', async (req, res) => {
+    try {
+        const { telegramId } = req.body || {};
+        const tgId = parseInt(telegramId);
+        if (!Number.isFinite(tgId)) return res.status(400).json({ error: 'Invalid user' });
+        await ensureAdsTables(req.db);
+        const cfg = await getMonetagConfig(req.db);
+        if (!cfg.enabled || !cfg.smartlink) return res.status(400).json({ error: 'Ads not available' });
+        // enforce limits
+        const hourCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= datetime('now', '-1 hour')`, [tgId]);
+        const dayCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [tgId]);
+        if ((hourCnt?.c || 0) >= cfg.hourlyLimit) return res.status(429).json({ error: 'Hourly limit reached' });
+        if ((dayCnt?.c || 0) >= cfg.dailyLimit) return res.status(429).json({ error: 'Daily limit reached' });
+        const clickId = `ad_${tgId}_${Date.now()}`;
+        await req.db.run(`INSERT INTO ads_clicks (telegram_id, provider, click_id) VALUES (?, 'monetag', ?)`, [tgId, clickId]);
+        // Smartlink with subid for postback
+        const url = new URL(cfg.smartlink);
+        url.searchParams.set('sub1', String(tgId));
+        url.searchParams.set('sub2', clickId);
+        res.json({ success: true, smartlink: url.toString(), clickId, requiredSeconds: cfg.requiredSeconds });
+    } catch (e) {
+        console.error('ads start error', e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Monetag S2S Postback endpoint (configure this on Monetag)
+// Example: GET /api/monetag/postback?token=XXX&sub1={telegramId}&sub2={clickId}&revenue=0.05&txid=abc
+app.all('/api/monetag/postback', async (req, res) => {
+    try {
+        await ensureAdsTables(req.db);
+        const cfg = await getMonetagConfig(req.db);
+        const q = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+        const token = String(q.token || '');
+        if (!cfg.token || token !== cfg.token) return res.status(403).json({ error: 'Bad token' });
+        const tgId = parseInt(q.sub1 || q.telegramId || q.uid);
+        const clickId = String(q.sub2 || q.click_id || '');
+        const txid = String(q.txid || q.transaction_id || q.conv || '');
+        const revenue = parseFloat(q.revenue || q.payout || 0) || 0;
+        if (!Number.isFinite(tgId) || !clickId) return res.status(400).json({ error: 'Missing params' });
+        // Required dwell time since click
+        if (cfg.requiredSeconds > 0) {
+            const row = await req.db.get(`SELECT created_at FROM ads_clicks WHERE click_id = ?`, [clickId]);
+            if (!row) return res.status(400).json({ error: 'Unknown clickId' });
+            const clickedAt = new Date(row.created_at + 'Z').getTime();
+            if (isFinite(clickedAt)) {
+                const diffSec = Math.floor((Date.now() - clickedAt) / 1000);
+                if (diffSec < cfg.requiredSeconds) return res.status(200).json({ ok: true, ignored: true, reason: 'dwell_time' });
+            }
+        }
+        // Enforce per-user limits
+        const hourCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= datetime('now', '-1 hour')`, [tgId]);
+        const dayCnt = await req.db.get(`SELECT COUNT(*) AS c FROM ads_earnings WHERE telegram_id = ? AND created_at >= date('now')`, [tgId]);
+        if ((hourCnt?.c || 0) >= cfg.hourlyLimit) return res.status(200).json({ ok: true, ignored: true, reason: 'hourly_limit' });
+        if ((dayCnt?.c || 0) >= cfg.dailyLimit) return res.status(200).json({ ok: true, ignored: true, reason: 'daily_limit' });
+        // Determine reward points
+        const points = cfg.fixedRewardPoints > 0 ? cfg.fixedRewardPoints : Math.max(1, Math.round(revenue * 100));
+        await req.db.transaction(async (tx) => {
+            // credit points
+            const u = await tx.get('SELECT id FROM users WHERE telegram_id = ?', [tgId]);
+            if (!u) throw new Error('User not found');
+            await tx.run(`UPDATE users SET points = points + ?, total_points_earned = total_points_earned + ?, updated_at = datetime('now') WHERE id = ?`, [points, points, u.id]);
+            await tx.run(`INSERT INTO ads_earnings (telegram_id, provider, provider_txid, click_id, points_earned, revenue_amount) VALUES (?, 'monetag', ?, ?, ?, ?)`, [tgId, txid || null, clickId || null, points, revenue || null]);
+            // log for earnings history UI as generic earnings
+            await tx.run(`INSERT INTO claims_history (telegram_id, points_earned, claimed_at) VALUES (?, ?, datetime('now'))`, [tgId, points]);
+        });
+        try { await sendTelegramMessage(tgId, `🎯 Ads task completed. You earned +${points} points.`); } catch(_) {}
+        res.json({ ok: true, credited: points });
+    } catch (e) {
+        console.error('monetag postback error', e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // Bot verification endpoints
 app.post('/api/verify-channel-membership', async (req, res) => {
     try {

@@ -357,6 +357,7 @@
             <div class="admin-tab" data-tab="channels">📺 Channels</div>
             <div class="admin-tab" data-tab="groups">👥 Groups</div>
             <div class="admin-tab" data-tab="social">🌐 Social Tasks</div>
+            <div class="admin-tab" data-tab="ads">🧲 Ads</div>
             <div class="admin-tab" data-tab="moderation">🛡️ Moderation</div>
             <div class="admin-tab" data-tab="broadcast">📣 Broadcast</div>
             <div class="admin-tab" data-tab="onboarding">✅ Onboarding</div>
@@ -984,6 +985,55 @@
                 <div id="groupsList">
                     <div class="loading">Loading groups...</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Ads/Monetag Config Tab -->
+        <div id="adsTab" class="tab-content">
+            <div class="config-card">
+                <div class="config-title"><i class="fas fa-magnet"></i> Monetag Ads</div>
+                <form id="monetagConfigForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Enable Monetag</label>
+                            <input type="checkbox" id="monetagEnabled">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Smartlink URL</label>
+                            <input type="text" class="form-input" id="monetagSmartlink" placeholder="https://smartlink.monetag.com/...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Postback Token</label>
+                            <input type="text" class="form-input" id="monetagToken" placeholder="secure-shared-token">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Fixed Reward Points (optional)</label>
+                            <input type="number" class="form-input" id="monetagFixedRewardPoints" placeholder="0 = use revenue * 100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Hourly Limit</label>
+                            <input type="number" class="form-input" id="adsHourlyLimit" placeholder="20">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Daily Limit</label>
+                            <input type="number" class="form-input" id="adsDailyLimit" placeholder="60">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Required Seconds (dwell)</label>
+                            <input type="number" class="form-input" id="adsRequiredSeconds" placeholder="20">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="form-label">Your Postback URL</label>
+                            <input type="text" class="form-input" id="monetagPostbackUrl" readonly>
+                            <div class="form-help">Configure this URL in Monetag with parameters: token, sub1 (telegramId), sub2 (clickId), revenue, txid</div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Monetag Config</button>
+                </form>
             </div>
         </div>
     </div>
