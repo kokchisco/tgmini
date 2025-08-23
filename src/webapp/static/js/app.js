@@ -1907,32 +1907,19 @@ window.openAdsTaskModal = openAdsTaskModal;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
-    // Ensure footer nav layout matches latest spec regardless of cached HTML
+    // Ensure footer nav layout matches latest spec but preserve original structure and styling
     try {
         const footer = document.getElementById('footerNav');
-        if (footer) {
-            footer.innerHTML = `
-                <a href="/home" class="footer-nav-item ${currentPage==='home'?'active':''}" data-page="home">
-                    <i class="fas fa-home"></i>
-                    <span>Home</span>
-                </a>
-                <a href="/ads" class="footer-nav-item" data-page="ads">
-                    <i class="fas fa-magnet"></i>
-                    <span>Ads</span>
-                </a>
-                <a href="/earn" class="footer-nav-item" data-page="earn">
-                    <i class="fas fa-gift"></i>
-                    <span>Earn</span>
-                </a>
-                <a href="/tasks" class="footer-nav-item" data-page="tasks">
-                    <i class="fas fa-tasks"></i>
-                    <span>Tasks</span>
-                </a>
-                <a href="/profile" class="footer-nav-item" data-page="profile">
-                    <i class="fas fa-user"></i>
-                    <span>Profile</span>
-                </a>
-            `;
+        if (footer && !footer.dataset.patched) {
+            const items = footer.querySelectorAll('.footer-nav-item');
+            const map = { home: '/home', ads: '/ads', earn: '/earn', tasks: '/tasks', profile: '/profile' };
+            items.forEach((a) => {
+                const page = a.getAttribute('data-page');
+                if (map[page]) a.setAttribute('href', map[page]);
+                if (page === 'history') { a.setAttribute('data-page','tasks'); a.querySelector('span').textContent='Tasks'; a.querySelector('i').className='fas fa-tasks'; a.setAttribute('href','/tasks'); }
+                if (page === 'tasks') { a.setAttribute('data-page','ads'); a.querySelector('span').textContent='Ads'; a.querySelector('i').className='fas fa-magnet'; a.setAttribute('href','/ads'); }
+            });
+            footer.dataset.patched = '1';
         }
     } catch(_) {}
     // Try to sync Telegram profile so backend has username/first/last
