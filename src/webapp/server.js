@@ -1481,29 +1481,40 @@ app.post('/api/admin/withdrawals/:id/approve', async (req, res) => {
         // Paystack: create transfer recipient (resolve bank code dynamically)
         const bankCode = await resolvePaystackBankCode(req.db, cfg.secret, bank.bank_name);
         if (!bankCode) return res.status(400).json({ error: 'Unsupported bank code' });
-        const amountKobo = Math.round((w.receivable_currency_amount != null ? Number(w.receivable_currency_amount) : Number((w.amount || 0))) * 100);
+        const calcAmount = (w.receivable_currency_amount != null ? Number(w.receivable_currency_amount) : Number((w.amount || 0)));
+        const amountKobo = Math.round(calcAmount * 100);
+        if (!Number.isFinite(calcAmount) || calcAmount <= 0 || !Number.isFinite(amountKobo) || amountKobo <= 0) {
+            const rate = parseFloat(await getConfig(req.db, 'pointToCurrencyRate', process.env.POINT_TO_CURRENCY_RATE || 1));
+            return res.status(400).json({ error: 'Invalid payout amount', details: { receivable_currency_amount: w.receivable_currency_amount, points_amount: w.amount, pointToCurrencyRate: rate } });
+        }
         const reference = `WD${w.id}-${Date.now()}`;
 
         const recip = await fetch('https://api.paystack.co/transferrecipient', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },
             body: JSON.stringify({ type: 'nuban', name: bank.account_name, account_number: bank.account_number, bank_code: bankCode, currency: 'NGN' })
-        }).then(r=>r.json()).catch(()=>null);
-        if (!recip || !recip.status || !(recip.data && recip.data.recipient_code)) {
-            return res.status(500).json({ error: 'Failed to create transfer recipient' });
+        }).then(r=>r.json()).catch((e)=>{ console.error('Paystack recipient error:', e); return null; });
+        if (!recip) {
+            return res.status(502).json({ error: 'Failed to reach Paystack for recipient' });
         }
-        const recipientCode = recip.data.recipient_code;
+        let recipientCode = recip && recip.data && recip.data.recipient_code ? String(recip.data.recipient_code) : null;
+        if (!recip.status && !recipientCode) {
+            return res.status(400).json({ error: 'Paystack recipient error', details: recip });
+        }
 
         const tr = await fetch('https://api.paystack.co/transfer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },
             body: JSON.stringify({ source: 'balance', amount: amountKobo, recipient: recipientCode, reason: 'Withdrawal', reference })
-        }).then(r=>r.json()).catch(()=>null);
-        if (!tr || !tr.status) {
-            return res.status(500).json({ error: 'Failed to initiate transfer' });
+        }).then(r=>r.json()).catch((e)=>{ console.error('Paystack transfer error:', e); return null; });
+        if (!tr) {
+            return res.status(502).json({ error: 'Failed to reach Paystack for transfer' });
+        }
+        if (!tr.status) {
+            return res.status(400).json({ error: 'Paystack transfer error', details: tr });
         }
 
-        await req.db.run(`UPDATE withdrawals SET provider='paystack', provider_order_id = ?, provider_trade_no = ?, provider_result = ?, processed_at = datetime('now'), status = 'pending' WHERE id = ?`, [reference, tr.data && tr.data.transfer_code ? String(tr.data.transfer_code) : null, tr.message || '', id]);
+        await req.db.run(`UPDATE withdrawals SET provider='paystack', provider_order_id = ?, provider_trade_no = ?, provider_result = ?, processed_at = datetime('now'), status = 'pending' WHERE id = ?`, [reference, tr.data && tr.data.transfer_code ? String(tr.data.transfer_code) : null, JSON.stringify(tr), id]);
 
         if (w.telegram_id) await sendTelegramMessage(w.telegram_id, `✅ Your withdrawal is being processed. Ref: ${reference}`);
         res.json({ success: true, autoPayout: true, provider: 'paystack', response: tr });
