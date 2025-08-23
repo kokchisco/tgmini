@@ -47,6 +47,13 @@ const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString() + ' ' + new Date(dateString).toLocaleTimeString();
 };
 
+function safeAlert(message){
+    try {
+        if (tg && tg.showAlert) return tg.showAlert(String(message));
+    } catch (_) {}
+    try { alert(String(message)); } catch (_) {}
+}
+
 // API functions
 const apiCall = async (endpoint, options = {}) => {
     try {
@@ -79,9 +86,23 @@ const apiCall = async (endpoint, options = {}) => {
         console.log('Response status:', response.status);
         
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Response error:', errorText);
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
+            const ct = response.headers.get('content-type') || '';
+            let shortMsg = `HTTP ${response.status}`;
+            try {
+                if (ct.includes('application/json')) {
+                    const j = await response.json();
+                    const msg = j && (j.error || j.message || (j.details && (j.details.message || j.details.error)));
+                    shortMsg = `HTTP ${response.status}: ${msg || 'Request failed'}`;
+                } else {
+                    const txt = await response.text();
+                    shortMsg = `HTTP ${response.status}: ${txt}`;
+                }
+            } catch (e) {
+                try { const t = await response.text(); shortMsg = `HTTP ${response.status}: ${t}`; } catch(_) {}
+            }
+            if (shortMsg.length > 300) shortMsg = shortMsg.slice(0, 300) + '…';
+            console.error('Response error:', shortMsg);
+            throw new Error(shortMsg);
         }
 
         const data = await response.json();
@@ -1036,10 +1057,10 @@ document.addEventListener('click', async (e) => {
             const qs = mode === 'manual' ? '?mode=manual' : '';
             showGlobalOverlay(mode === 'manual' ? 'Approving manually...' : 'Initiating Paystack transfer...');
             await apiCall(`/api/admin/withdrawals/${id}/approve${qs}`, { method: 'POST', timeoutMs: 30000 });
-            if (tg && tg.showAlert) tg.showAlert(mode === 'manual' ? '✅ Withdrawal approved manually' : '✅ Auto payout initiated'); else alert(mode === 'manual' ? 'Withdrawal approved manually' : 'Auto payout initiated');
+            safeAlert(mode === 'manual' ? '✅ Withdrawal approved manually' : '✅ Auto payout initiated');
             loadWithdrawals();
         } catch (error) {
-            if (tg && tg.showAlert) tg.showAlert('❌ ' + error.message); else alert(error.message || 'Error');
+            safeAlert('❌ ' + (error && error.message ? error.message : 'Request failed'));
         }
         finally { hideGlobalOverlay(); }
         return;
