@@ -146,11 +146,15 @@ async function getIntConfig(db, key, fallback){
 function getPaystackBankCode(localBankName){
     const name = String(localBankName || '').toLowerCase();
     const map = {
-        // Minimal mapping for current options; extend as needed
+        // Minimal mapping for common options; dynamic resolver will handle the rest
         'kuda': '50211', // Kuda Microfinance Bank
+        'kuda microfinance bank': '50211',
         'moniepoint': '50515', // Moniepoint Microfinance Bank
+        'moniepoint microfinance bank': '50515',
         'access bank': '044',
         'gtbank': '058',
+        'gtb': '058',
+        'guaranty trust': '058',
         'guaranty trust bank': '058',
         'first bank': '011',
         'first bank of nigeria': '011',
@@ -167,6 +171,81 @@ function getPaystackBankCode(localBankName){
         'union bank of nigeria': '032',
     };
     return map[name] || null;
+}
+
+function normalizeBankName(s){
+    const raw = String(s || '').toLowerCase().trim();
+    // remove punctuation and common suffixes
+    const cleaned = raw
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\b(bank|microfinance|mfb|limited|ltd|plc)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    // special cases
+    if (cleaned.includes('guaranty') && cleaned.includes('trust')) return 'guaranty trust';
+    if (cleaned === 'gt' || cleaned === 'gtb' || cleaned === 'gt bank') return 'guaranty trust';
+    return cleaned;
+}
+
+async function fetchPaystackBanks(secret){
+    try {
+        const resp = await fetch('https://api.paystack.co/bank?currency=NGN', {
+            headers: { Authorization: `Bearer ${secret}` }
+        }).then(r => r.json());
+        if (!resp || resp.status !== true || !Array.isArray(resp.data)) return [];
+        return resp.data.map(b => ({ name: b.name, code: b.code }));
+    } catch (_) { return []; }
+}
+
+async function getCachedPaystackBanks(db, secret){
+    try {
+        const json = await getConfig(db, 'paystackBanksJson', '');
+        const tsStr = await getConfig(db, 'paystackBanksUpdatedAt', '0');
+        const ts = parseInt(tsStr, 10) || 0;
+        const maxAgeMs = 1000 * 60 * 60 * 24 * 3; // 3 days
+        if (json && Date.now() - ts < maxAgeMs) {
+            try { return JSON.parse(json); } catch (_) {}
+        }
+        const fresh = await fetchPaystackBanks(secret);
+        if (fresh.length > 0) {
+            await setConfig(db, { paystackBanksJson: JSON.stringify(fresh), paystackBanksUpdatedAt: String(Date.now()) });
+            return fresh;
+        }
+        // fallback to old cache if fetch failed
+        if (json) { try { return JSON.parse(json); } catch (_) { return []; } }
+        return [];
+    } catch (_) { return []; }
+}
+
+async function resolvePaystackBankCode(db, secret, localBankName){
+    // 1) Try static map quickly
+    const direct = getPaystackBankCode(localBankName);
+    if (direct) return direct;
+
+    // 2) Try dynamic list from Paystack
+    const list = await getCachedPaystackBanks(db, secret);
+    if (!list || list.length === 0) return null;
+
+    const input = String(localBankName || '');
+    const inputNorm = normalizeBankName(input);
+
+    // a) exact (case-insensitive)
+    const exact = list.find(b => String(b.name || '').toLowerCase().trim() === input.toLowerCase().trim());
+    if (exact) return String(exact.code);
+
+    // b) normalized strict equality
+    const exactNorm = list.find(b => normalizeBankName(b.name) === inputNorm);
+    if (exactNorm) return String(exactNorm.code);
+
+    // c) includes either way (normalized)
+    const incl = list.find(b => {
+        const bn = normalizeBankName(b.name);
+        return bn.includes(inputNorm) || inputNorm.includes(bn);
+    });
+    if (incl) return String(incl.code);
+
+    // d) give up
+    return null;
 }
 
 async function getPaystackConfig(db){
@@ -1399,8 +1478,8 @@ app.post('/api/admin/withdrawals/:id/approve', async (req, res) => {
             return res.json({ success: true, autoPayout: false, mode: 'manual' });
         }
 
-        // Paystack: create transfer recipient
-        const bankCode = getPaystackBankCode(bank.bank_name);
+        // Paystack: create transfer recipient (resolve bank code dynamically)
+        const bankCode = await resolvePaystackBankCode(req.db, cfg.secret, bank.bank_name);
         if (!bankCode) return res.status(400).json({ error: 'Unsupported bank code' });
         const amountKobo = Math.round((w.receivable_currency_amount != null ? Number(w.receivable_currency_amount) : Number((w.amount || 0))) * 100);
         const reference = `WD${w.id}-${Date.now()}`;
