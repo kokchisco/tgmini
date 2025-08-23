@@ -367,7 +367,7 @@ const pageLoaders = {
                             await window.show_9758957();
                         } catch (e1) {
                             // Fallback to rewarded popup variant if interstitial fails
-                            try { await window.show_9758957('pop'); } catch (e2) { throw e2 || e1; }
+                            try { await window.show_9758957('pop'); } catch (e2) { throw new Error((e2 && e2.message) || (e1 && e1.message) || 'SDK call failed'); }
                         }
                     } else {
                         // Fallback to dynamic loader/start (legacy)
@@ -381,6 +381,12 @@ const pageLoaders = {
                 }
             });
         } catch(_) {}
+        // Add SDK diagnostics to surface exact network failure reason
+        try {
+            if (typeof window.show_9758957 !== 'function') {
+                console.warn('Monetag SDK function show_9758957 is not available');
+            }
+        } catch (_) {}
     },
 
     async loadEarnPage() {
