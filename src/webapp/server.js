@@ -1493,7 +1493,7 @@ app.post('/api/admin/withdrawals/:id/approve', async (req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },
             body: JSON.stringify({ type: 'nuban', name: bank.account_name, account_number: bank.account_number, bank_code: bankCode, currency: 'NGN' })
-        }).then(r=>r.json()).catch((e)=>{ console.error('Paystack recipient error:', e); return null; });
+        , signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined }).then(r=>r.json()).catch((e)=>{ console.error('Paystack recipient error:', e); return null; });
         if (!recip) {
             return res.status(502).json({ error: 'Failed to reach Paystack for recipient' });
         }
@@ -1506,7 +1506,7 @@ app.post('/api/admin/withdrawals/:id/approve', async (req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },
             body: JSON.stringify({ source: 'balance', amount: amountKobo, recipient: recipientCode, reason: 'Withdrawal', reference })
-        }).then(r=>r.json()).catch((e)=>{ console.error('Paystack transfer error:', e); return null; });
+        , signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined }).then(r=>r.json()).catch((e)=>{ console.error('Paystack transfer error:', e); return null; });
         if (!tr) {
             return res.status(502).json({ error: 'Failed to reach Paystack for transfer' });
         }

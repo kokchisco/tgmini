@@ -53,7 +53,8 @@ const apiCall = async (endpoint, options = {}) => {
         const url = `${API_BASE}${endpoint}`;
         console.log('Making API call to:', url);
         
-        const reqOptions = { method: 'GET', headers: { 'Content-Type': 'application/json' }, ...options };
+        const { timeoutMs, ...rest } = options || {};
+        const reqOptions = { method: 'GET', headers: { 'Content-Type': 'application/json' }, ...rest };
         reqOptions.headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         if (endpoint.startsWith('/api/admin/') && userId) {
             reqOptions.headers['x-admin-id'] = String(userId);
@@ -69,7 +70,11 @@ const apiCall = async (endpoint, options = {}) => {
             reqOptions.body = JSON.stringify(bodyObj);
         }
 
-        const response = await fetch(url, reqOptions);
+        // Timeout support
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 25000);
+        reqOptions.signal = controller.signal;
+        const response = await fetch(url, reqOptions).finally(() => clearTimeout(t));
 
         console.log('Response status:', response.status);
         
@@ -87,6 +92,31 @@ const apiCall = async (endpoint, options = {}) => {
         throw error;
     }
 };
+
+function showGlobalOverlay(message){
+    let el = document.getElementById('globalOverlay');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'globalOverlay';
+        el.style.position = 'fixed';
+        el.style.inset = '0';
+        el.style.background = 'rgba(0,0,0,0.4)';
+        el.style.display = 'flex';
+        el.style.alignItems = 'center';
+        el.style.justifyContent = 'center';
+        el.style.zIndex = '10000';
+        el.innerHTML = `<div style="background:#0f172a;color:#fff;border:1px solid rgba(255,255,255,0.1);padding:14px 16px;border-radius:10px;min-width:240px;text-align:center;font-size:14px;">${message || 'Please wait...'}</div>`;
+        document.body.appendChild(el);
+    } else {
+        el.querySelector('div').textContent = message || 'Please wait...';
+        el.style.display = 'flex';
+    }
+}
+
+function hideGlobalOverlay(){
+    const el = document.getElementById('globalOverlay');
+    if (el) el.style.display = 'none';
+}
 
 // Check admin status
 const checkAdminStatus = async () => {
@@ -1004,12 +1034,14 @@ document.addEventListener('click', async (e) => {
             const mode = await showApproveModeDialog();
             if (!mode) return; // cancelled
             const qs = mode === 'manual' ? '?mode=manual' : '';
-            await apiCall(`/api/admin/withdrawals/${id}/approve${qs}`, { method: 'POST' });
+            showGlobalOverlay(mode === 'manual' ? 'Approving manually...' : 'Initiating Paystack transfer...');
+            await apiCall(`/api/admin/withdrawals/${id}/approve${qs}`, { method: 'POST', timeoutMs: 30000 });
             if (tg && tg.showAlert) tg.showAlert(mode === 'manual' ? '✅ Withdrawal approved manually' : '✅ Auto payout initiated'); else alert(mode === 'manual' ? 'Withdrawal approved manually' : 'Auto payout initiated');
             loadWithdrawals();
         } catch (error) {
             if (tg && tg.showAlert) tg.showAlert('❌ ' + error.message); else alert(error.message || 'Error');
         }
+        finally { hideGlobalOverlay(); }
         return;
     }
     const reject = e.target.closest('.reject-withdrawal');
