@@ -1842,66 +1842,69 @@ window.toggleFaq = toggleFaq;
 
 // Ads Task Modal and flow
 async function openAdsTaskModal(){
+    // Use graceful fallback if overview fails
+    let overview = { enabled: true, dailyCompleted: 0, hourlyCompleted: 0, lifetimeCompleted: 0, totalEarnings: 0, dailyLimit: 60, hourlyLimit: 20 };
     try {
-        const overview = await apiCall(`/api/ads/overview/${userId}`);
-        const modal = document.createElement('div');
-        Object.assign(modal.style, { position:'fixed', inset:'0', background:'rgba(0,0,0,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' });
-        const card = document.createElement('div');
-        Object.assign(card.style, { width:'100%', maxWidth:'460px', background:'#16181a', color:'#fff', borderRadius:'16px', padding:'20px', boxShadow:'0 12px 32px rgba(0,0,0,0.5)' });
-        card.innerHTML = `
-            <div style="font-size:18px;font-weight:700;margin-bottom:12px;">Ads Task Overview</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
-                    <div style="opacity:0.85;font-size:12px;">Daily Tasks Completed</div>
-                    <div style="font-size:20px;font-weight:700;">${overview.dailyCompleted || 0}</div>
-                    <div style="opacity:0.75;font-size:12px;">Limit: ${overview.dailyLimit || 60} tasks/day</div>
-                </div>
-                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
-                    <div style="opacity:0.85;font-size:12px;">Hourly Tasks Completed</div>
-                    <div style="font-size:20px;font-weight:700;">${overview.hourlyCompleted || 0}</div>
-                    <div style="opacity:0.75;font-size:12px;">Limit: ${overview.hourlyLimit || 20} tasks/hour</div>
-                </div>
-                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
-                    <div style="opacity:0.85;font-size:12px;">Lifetime Completed Tasks</div>
-                    <div style="font-size:20px;font-weight:700;">${overview.lifetimeCompleted || 0}</div>
-                </div>
-                <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
-                    <div style="opacity:0.85;font-size:12px;">Total Earnings</div>
-                    <div style="font-size:20px;font-weight:700;">${formatNumber(overview.totalEarnings || 0)}</div>
-                </div>
+        const data = await apiCall(`/api/ads/overview/${userId}`);
+        if (data && typeof data === 'object') overview = data;
+    } catch (_) { /* keep defaults, don't block UI */ }
+
+    const modal = document.createElement('div');
+    Object.assign(modal.style, { position:'fixed', inset:'0', background:'rgba(0,0,0,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' });
+    const card = document.createElement('div');
+    Object.assign(card.style, { width:'100%', maxWidth:'460px', background:'#16181a', color:'#fff', borderRadius:'16px', padding:'20px', boxShadow:'0 12px 32px rgba(0,0,0,0.5)' });
+    card.innerHTML = `
+        <div style="font-size:18px;font-weight:700;margin-bottom:12px;">Ads Task Overview</div>
+        ${overview && overview.enabled === false ? `<div class="error" style="margin-bottom:12px;">Ads are not configured yet.</div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                <div style="opacity:0.85;font-size:12px;">Daily Tasks Completed</div>
+                <div style="font-size:20px;font-weight:700;">${overview.dailyCompleted || 0}</div>
+                <div style="opacity:0.75;font-size:12px;">Limit: ${overview.dailyLimit || 60} tasks/day</div>
             </div>
-            <button id="adsStartBtn" class="btn btn-primary" style="width:100%">Start Task</button>
-        `;
-        modal.appendChild(card);
-        modal.addEventListener('click', (e)=>{ if (e.target === modal) modal.remove(); });
-        document.body.appendChild(modal);
-        document.getElementById('adsStartBtn').addEventListener('click', async ()=>{
-            try {
-                const s = await apiCall('/api/ads/start', { method: 'POST', body: JSON.stringify({ telegramId: userId }) });
-                // Inject SDK and call function
-                const zone = s.zoneId;
-                const sdkId = s.sdkId || `show_${zone}`;
-                if (zone) {
-                    if (!document.getElementById('monetagSdkScript')) {
-                        const scr = document.createElement('script');
-                        scr.id = 'monetagSdkScript';
-                        scr.src = '//libtl.com/sdk.js';
-                        scr.setAttribute('data-zone', String(zone));
-                        scr.setAttribute('data-sdk', String(sdkId));
-                        document.head.appendChild(scr);
-                        scr.onload = () => { try { if (window[sdkId]) window[sdkId](); } catch(_) {} };
-                    } else {
-                        try { if (window[sdkId]) window[sdkId](); } catch(_) {}
-                    }
+            <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                <div style="opacity:0.85;font-size:12px;">Hourly Tasks Completed</div>
+                <div style="font-size:20px;font-weight:700;">${overview.hourlyCompleted || 0}</div>
+                <div style="opacity:0.75;font-size:12px;">Limit: ${overview.hourlyLimit || 20} tasks/hour</div>
+            </div>
+            <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                <div style="opacity:0.85;font-size:12px;">Lifetime Completed Tasks</div>
+                <div style="font-size:20px;font-weight:700;">${overview.lifetimeCompleted || 0}</div>
+            </div>
+            <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;">
+                <div style="opacity:0.85;font-size:12px;">Total Earnings</div>
+                <div style="font-size:20px;font-weight:700;">${formatNumber(overview.totalEarnings || 0)}</div>
+            </div>
+        </div>
+        <button id="adsStartBtn" class="btn btn-primary" style="width:100%">Start Task</button>
+    `;
+    modal.appendChild(card);
+    modal.addEventListener('click', (e)=>{ if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    const startBtn = document.getElementById('adsStartBtn');
+    if (startBtn) startBtn.addEventListener('click', async ()=>{
+        try {
+            const s = await apiCall('/api/ads/start', { method: 'POST', body: JSON.stringify({ telegramId: userId }) });
+            const zone = s.zoneId;
+            const sdkId = s.sdkId || `show_${zone}`;
+            if (zone) {
+                if (!document.getElementById('monetagSdkScript')) {
+                    const scr = document.createElement('script');
+                    scr.id = 'monetagSdkScript';
+                    scr.src = '//libtl.com/sdk.js';
+                    scr.setAttribute('data-zone', String(zone));
+                    scr.setAttribute('data-sdk', String(sdkId));
+                    document.head.appendChild(scr);
+                    scr.onload = () => { try { if (window[sdkId]) window[sdkId](); } catch(_) {} };
+                } else {
+                    try { if (window[sdkId]) window[sdkId](); } catch(_) {}
                 }
-                modal.remove();
-            } catch (err) {
-                alert(err.message || 'Failed to start ads task');
             }
-        });
-    } catch (e) {
-        alert('Unable to load ads overview');
-    }
+            modal.remove();
+        } catch (err) {
+            alert(err.message || 'Failed to start ads task');
+        }
+    });
 }
 window.openAdsTaskModal = openAdsTaskModal;
 
