@@ -21,14 +21,14 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-            styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com", "data:"],
-            scriptSrc: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com", "http://libtl.com"],
-            scriptSrcElem: ["'self'", "https://telegram.org", "https://code.iconify.design", "https://libtl.com", "http://libtl.com"],
-            connectSrc: ["'self'", "https://api.telegram.org", "https://api.iconify.design", "https://code.iconify.design", "https://libtl.com"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com", "https:"],
+            styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com", "https:"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com", "data:", "https:"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https:", "http:"],
+            scriptSrcElem: ["'self'", "'unsafe-inline'", "https:", "http:"],
+            connectSrc: ["'self'", "https:", "wss:"],
             imgSrc: ["'self'", "data:", "https:"],
-            frameSrc: ["'self'", "https://telegram.org", "https://libtl.com"]
+            frameSrc: ["'self'", "https:"]
         }
     }
 }));
