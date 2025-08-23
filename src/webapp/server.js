@@ -145,9 +145,10 @@ async function getIntConfig(db, key, fallback){
 // Monetag helpers and config
 async function getMonetagConfig(db){
     return {
-        // Only limits remain configurable; SDK is included statically in the client
+        // Limits and optional fixed reward configured via admin panel
         hourlyLimit: await getIntConfig(db, 'adsHourlyLimit', 20),
-        dailyLimit: await getIntConfig(db, 'adsDailyLimit', 60)
+        dailyLimit: await getIntConfig(db, 'adsDailyLimit', 60),
+        fixedRewardPoints: await getIntConfig(db, 'adsFixedRewardPoints', 0)
     };
 }
 
@@ -1251,10 +1252,11 @@ app.post('/api/admin/config/paystack', async (req, res) => {
 app.post('/api/admin/config/monetag', async (req, res) => {
     try {
         if (!isAdmin(req)) return res.status(403).json({ error: 'Access denied' });
-        const { hourlyLimit, dailyLimit } = req.body || {};
+        const { hourlyLimit, dailyLimit, fixedRewardPoints } = req.body || {};
         await setConfig(req.db, {
             adsHourlyLimit: String(parseInt(hourlyLimit || 20)),
-            adsDailyLimit: String(parseInt(dailyLimit || 60))
+            adsDailyLimit: String(parseInt(dailyLimit || 60)),
+            adsFixedRewardPoints: String(parseInt(fixedRewardPoints || 0))
         });
         res.json({ success: true });
     } catch (e) {
@@ -1687,7 +1689,7 @@ app.all('/postback', async (req, res) => {
         const token = String(q.token || '');
         // If a token is configured, validate. If not, accept without token.
         if (cfg.token && token !== cfg.token) return res.status(403).send('BAD_TOKEN');
-        const tgId = parseInt(q.telegram_id || q.sub1 || q.uid);
+        const tgId = parseInt(q.telegram_id || q.sub1 || q.uid || q.ymid);
         const zoneId = String(q.zone_id || cfg.zoneId || '');
         const eventType = String(q.event_type || '');
         const rewardYes = String(q.reward_event_type || '').toLowerCase() === 'yes';

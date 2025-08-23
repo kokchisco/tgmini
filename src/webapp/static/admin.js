@@ -236,16 +236,9 @@ const loadConfiguration = async () => {
         const ps = document.getElementById('paystackSecret'); if (ps) ps.value = pc.secret || '';
         // Monetag config
         const mc = data.monetagConfig || {};
-        if (document.getElementById('monetagEnabled')) document.getElementById('monetagEnabled').checked = !!mc.enabled;
-        if (document.getElementById('monetagZoneId')) document.getElementById('monetagZoneId').value = mc.zoneId || '';
-        if (document.getElementById('monetagSdkId')) document.getElementById('monetagSdkId').value = mc.sdkId || '';
-        if (document.getElementById('monetagToken')) document.getElementById('monetagToken').value = mc.token || '';
-        if (document.getElementById('monetagPostbackUrl')) document.getElementById('monetagPostbackUrl').value = mc.postbackUrl || '';
-        if (document.getElementById('monetagFixedRewardPoints')) document.getElementById('monetagFixedRewardPoints').value = mc.fixedRewardPoints || 0;
         if (document.getElementById('adsHourlyLimit')) document.getElementById('adsHourlyLimit').value = mc.hourlyLimit || 20;
         if (document.getElementById('adsDailyLimit')) document.getElementById('adsDailyLimit').value = mc.dailyLimit || 60;
-        if (document.getElementById('adsRequiredSeconds')) document.getElementById('adsRequiredSeconds').value = mc.requiredSeconds || 20;
-        try { const token = mc.token || ''; const base = window.location.origin; document.getElementById('monetagPostbackUrl').value = `${base}/postback?token=${encodeURIComponent(token)}&telegram_id={telegram_id}&zone_id={zone_id}&event_type={event_type}&reward_event_type={reward_event_type}&estimated_price={estimated_price}&ymid={ymid}`; } catch(_) {}
+        if (document.getElementById('adsFixedRewardPoints')) document.getElementById('adsFixedRewardPoints').value = mc.fixedRewardPoints || 0;
         if (document.getElementById('appName')) document.getElementById('appName').value = (data.appConfig && data.appConfig.appName) || 'TGTask';
     } catch (error) {
         console.error('Error loading configuration:', error);
@@ -743,28 +736,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Monetag config form and tab logic
     const monetagForm = document.getElementById('monetagConfigForm');
-    const updateMonetagPostback = () => {
-        try {
-            const base = window.location.origin;
-            const token = document.getElementById('monetagToken')?.value || '';
-            const url = `${base}/postback?token=${encodeURIComponent(token)}&telegram_id={telegram_id}&zone_id={zone_id}&event_type={event_type}&reward_event_type={reward_event_type}&estimated_price={estimated_price}&ymid={ymid}`;
-            const el = document.getElementById('monetagPostbackUrl');
-            if (el) el.value = url;
-        } catch(_) {}
-    };
     if (monetagForm) {
         monetagForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const payload = {
-                enabled: !!document.getElementById('monetagEnabled')?.checked,
-                zoneId: document.getElementById('monetagZoneId')?.value || '',
-                sdkId: document.getElementById('monetagSdkId')?.value || '',
-                token: document.getElementById('monetagToken')?.value || '',
-                postbackUrl: document.getElementById('monetagPostbackUrl')?.value || '',
-                fixedRewardPoints: parseInt(document.getElementById('monetagFixedRewardPoints')?.value || '0'),
                 hourlyLimit: parseInt(document.getElementById('adsHourlyLimit')?.value || '20'),
                 dailyLimit: parseInt(document.getElementById('adsDailyLimit')?.value || '60'),
-                requiredSeconds: parseInt(document.getElementById('adsRequiredSeconds')?.value || '20')
+                fixedRewardPoints: parseInt(document.getElementById('adsFixedRewardPoints')?.value || '0')
             };
             try {
                 await apiCall('/api/admin/config/monetag', { method: 'POST', body: JSON.stringify(payload) });
@@ -773,9 +751,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 tg.showAlert('❌ ' + (err.message || 'Failed to save Monetag config'));
             }
         });
-        const tokenEl = document.getElementById('monetagToken');
-        if (tokenEl) tokenEl.addEventListener('input', updateMonetagPostback);
-        updateMonetagPostback();
     }
 
     // App configuration form
