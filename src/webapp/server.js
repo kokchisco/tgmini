@@ -159,28 +159,53 @@ async function getMonetagConfig(db){
 }
 
 async function ensureAdsTables(db){
+    const isPg = !!db.isPostgres;
     try {
-        await db.run(`CREATE TABLE IF NOT EXISTS ads_clicks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER NOT NULL,
-            provider TEXT NOT NULL,
-            click_id TEXT NOT NULL,
-            created_at DATETIME DEFAULT (datetime('now'))
-        )`);
-    } catch (_) {}
+        if (isPg) {
+            await db.run(`CREATE TABLE IF NOT EXISTS ads_clicks (
+                id SERIAL PRIMARY KEY,
+                telegram_id INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                click_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`);
+        } else {
+            await db.run(`CREATE TABLE IF NOT EXISTS ads_clicks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                click_id TEXT NOT NULL,
+                created_at DATETIME DEFAULT (datetime('now'))
+            )`);
+        }
+    } catch (e) { /* ignore */ }
     try {
-        await db.run(`CREATE TABLE IF NOT EXISTS ads_earnings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER NOT NULL,
-            provider TEXT NOT NULL,
-            provider_txid TEXT,
-            click_id TEXT,
-            points_earned INTEGER NOT NULL,
-            revenue_amount REAL,
-            created_at DATETIME DEFAULT (datetime('now')),
-            UNIQUE(provider, provider_txid)
-        )`);
-    } catch (_) {}
+        if (isPg) {
+            await db.run(`CREATE TABLE IF NOT EXISTS ads_earnings (
+                id SERIAL PRIMARY KEY,
+                telegram_id INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                provider_txid TEXT,
+                click_id TEXT,
+                points_earned INTEGER NOT NULL,
+                revenue_amount REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_provider_tx UNIQUE(provider, provider_txid)
+            )`);
+        } else {
+            await db.run(`CREATE TABLE IF NOT EXISTS ads_earnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                provider_txid TEXT,
+                click_id TEXT,
+                points_earned INTEGER NOT NULL,
+                revenue_amount REAL,
+                created_at DATETIME DEFAULT (datetime('now')),
+                UNIQUE(provider, provider_txid)
+            )`);
+        }
+    } catch (e) { /* ignore */ }
 }
 
 // Paystack helpers and config
